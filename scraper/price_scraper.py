@@ -174,18 +174,33 @@ class PriceScraper:
             else:
                 logger.warning(f"Skipping {ticker} — no data")
 
-
 # ──────────────────────────────────────────────────────────────
-# LQ45 CONSTITUENT LIST (as of latest review — update periodically)
+# STOCK UNIVERSE: LQ45 + IDX SMC Liquid (~100 stocks)
+# Covers large-caps AND liquid mid-caps (2nd tier)
+# Update this list every 6 months when IDX reviews constituents
+# (January and July — check idx.co.id for latest)
 # ──────────────────────────────────────────────────────────────
 
 LQ45_TICKERS = [
+    # ── LQ45 (Large Cap) ──
     "ACES", "ADRO", "AKRA", "AMMN", "AMRT", "ANTM", "ASII", "BBCA",
     "BBNI", "BBRI", "BBTN", "BFIN", "BMRI", "BRPT", "BUKA", "CPIN",
-    "ESSA", "EXCL", "GGRM", "GOTO", "HRUM", "ICBP", "INCO", "INDF",
-    "INKP", "INTP", "ITMG", "JPFA", "KLBF", "MAPI", "MBMA", "MDKA",
-    "MEDC", "MIKA", "PGAS", "PGEO", "SMGR", "TBIG", "TINS", "TLKM",
-    "TOWR", "TPIA", "UNTR", "UNVR", "WIKA",
+    "CTRA", "ESSA", "EXCL", "GGRM", "GOTO", "HRUM", "ICBP", "INCO",
+    "INDF", "INKP", "INTP", "ITMG", "JPFA", "KLBF", "MAPA", "MAPI",
+    "MBMA", "MDKA", "MEDC", "MIKA", "PGAS", "PGEO", "SMGR", "TBIG",
+    "TINS", "TLKM", "TOWR", "TPIA", "UNTR", "UNVR",
+
+    # ── IDX SMC Liquid (Mid Cap — 2nd Tier) ──
+    "AALI", "ACES", "AGII", "AKPI", "ALTO", "ARNA", "BALI",
+    "BBKP", "BBSS", "BCIP", "BFIN", "BIRD", "BJTM", "BSDE",
+    "BTPS", "BUKA", "CMRY", "CTRA", "DMAS", "DSNG", "DSSA",
+    "ELSA", "EMTK", "ERAA", "FILM", "GJTL", "HEXA", "HMSP",
+    "HOKI", "HRTA", "IGAR", "INDY", "INTA", "IPOL", "ISAT",
+    "ITMG", "JARR", "JSMR", "KBLI", "KIJA", "KLBF", "LINK",
+    "LPPF", "MAPI", "MDIA", "MDLN", "MKPI", "MNCN", "MTEL",
+    "MYOR", "NCKL", "PNBN", "PTBA", "PTPP", "PWON", "RALS",
+    "SCMA", "SIDO", "SILO", "SMRA", "SRTG", "SSMS", "TBIG",
+    "TKIM", "TOTL", "TSPC", "WIKA", "WSBP", "WTON",
 ]
 
 
