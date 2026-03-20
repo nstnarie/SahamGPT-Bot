@@ -174,6 +174,9 @@ class PortfolioManager:
         raw_shares = min(raw_shares, max_shares_by_cash)
 
         # Step 7: Round to lot
+        # Guard against NaN from missing data
+        if raw_shares != raw_shares or raw_shares <= 0:  # NaN check
+            return 0
         shares = round_to_lot(int(raw_shares))
 
         return shares
