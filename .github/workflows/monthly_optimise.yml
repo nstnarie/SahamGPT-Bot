@@ -1,0 +1,62 @@
+name: Monthly Optimisation
+
+on:
+  schedule:
+    - cron: "0 11 1 * *"
+  workflow_dispatch:
+
+jobs:
+  optimise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download database
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: idx-database
+          path: .
+          if_no_artifact_found: warn
+          workflow_conclusion: ""
+          search_artifacts: true
+        continue-on-error: true
+
+      - name: Run optimisation
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main_optimise.py --param-grid conservative --output optimisation_results.json
+
+      - name: Save database
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: idx-database
+          path: idx_swing_trader.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Save optimisation results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: optimisation-${{ github.run_number }}
+          path: optimisation_results.json
+          retention-days: 90
