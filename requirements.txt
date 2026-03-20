@@ -1,0 +1,24 @@
+# IDX Swing Trading Framework — Dependencies
+# Python 3.10+ required
+
+# Core data handling
+pandas>=2.0
+numpy>=1.24
+
+# Database
+SQLAlchemy>=2.0
+
+# Data scraping
+yfinance>=0.2.30
+requests>=2.31
+
+# Charting
+matplotlib>=3.7
+
+# Scheduler timezone support
+pytz>=2023.3
+
+# Optional but recommended
+# ta>=0.11.0          # Alternative technical analysis library
+# scipy>=1.11         # For advanced statistics
+# anthropic>=0.30     # Official Anthropic SDK (alternative to raw requests)

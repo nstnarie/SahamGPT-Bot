@@ -1,0 +1,1 @@
+from reports.visualizer import generate_all_reports
