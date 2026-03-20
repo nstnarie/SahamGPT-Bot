@@ -1,0 +1,232 @@
+# ──────────────────────────────────────────────────────────────
+# IDX Swing Trader — Run Backtest
+# ──────────────────────────────────────────────────────────────
+# Tests the trading formula on historical data to see if it works.
+# Sends a summary of results to your Telegram.
+# Downloads charts (equity curve, drawdown, etc.) as artifacts.
+#
+# How to run:
+#   Actions tab → "Run Backtest" → "Run workflow" → wait ~10 min
+# ──────────────────────────────────────────────────────────────
+
+name: Run Backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date"
+        required: true
+        default: "2021-01-01"
+      end_date:
+        description: "End date"
+        required: true
+        default: "2025-12-31"
+      capital:
+        description: "Starting capital (IDR)"
+        required: true
+        default: "1000000000"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download database
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: idx-database
+          path: .
+          if_no_artifact_found: warn
+          workflow_conclusion: ""
+          search_artifacts: true
+        continue-on-error: true
+
+      # If no database exists yet, scrape first
+      - name: Check if database exists
+        id: check_db
+        run: |
+          if [ -f idx_swing_trader.db ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Scrape data (if no database)
+        if: steps.check_db.outputs.exists == 'false'
+        run: |
+          python main_backtest.py \
+            --scrape \
+            --start ${{ github.event.inputs.start_date }} \
+            --end ${{ github.event.inputs.end_date }} \
+            --capital ${{ github.event.inputs.capital }} \
+            --output reports
+
+      - name: Run backtest (if database exists)
+        if: steps.check_db.outputs.exists == 'true'
+        run: |
+          python main_backtest.py \
+            --start ${{ github.event.inputs.start_date }} \
+            --end ${{ github.event.inputs.end_date }} \
+            --capital ${{ github.event.inputs.capital }} \
+            --output reports
+
+      # Send results to Telegram
+      - name: Send results to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python << 'EOF'
+          import os, requests
+
+          token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+          chat = os.getenv("TELEGRAM_CHAT_ID", "")
+          if not token or not chat:
+              print("Telegram not configured")
+              exit(0)
+
+          # Read the metrics summary
+          try:
+              with open("reports/metrics_summary.txt") as f:
+                  report = f.read()
+          except FileNotFoundError:
+              report = "Backtest completed but no summary file found."
+
+          # Parse key numbers from the report
+          lines = report.split("\n")
+          metrics = {}
+          for line in lines:
+              if ":" in line and any(k in line for k in [
+                  "Total Return", "CAGR", "Max Drawdown", "Sharpe",
+                  "Win Rate", "Profit Factor", "Total Trades",
+                  "Benchmark Return", "Alpha"
+              ]):
+                  parts = line.split(":")
+                  key = parts[0].strip()
+                  val = parts[1].strip()
+                  metrics[key] = val
+
+          # Build Telegram message
+          msg = "<b>📊 BACKTEST RESULTS</b>\n"
+          msg += f"Period: ${{ github.event.inputs.start_date }} to ${{ github.event.inputs.end_date }}\n"
+          msg += f"Capital: Rp {int('${{ github.event.inputs.capital }}'):,}\n\n"
+
+          # Returns
+          msg += "<b>💰 Returns</b>\n"
+          msg += f"  Total Return: {metrics.get('Total Return', '?')}\n"
+          msg += f"  CAGR: {metrics.get('CAGR', '?')}\n\n"
+
+          # Risk
+          msg += "<b>⚠️ Risk</b>\n"
+          msg += f"  Max Drawdown: {metrics.get('Max Drawdown', '?')}\n"
+          msg += f"  Sharpe Ratio: {metrics.get('Sharpe Ratio', '?')}\n\n"
+
+          # Trades
+          msg += "<b>📈 Trades</b>\n"
+          msg += f"  Total Trades: {metrics.get('Total Trades', '?')}\n"
+          msg += f"  Win Rate: {metrics.get('Win Rate', '?')}\n"
+          msg += f"  Profit Factor: {metrics.get('Profit Factor', '?')}\n\n"
+
+          # vs Benchmark
+          if "Benchmark Return" in metrics:
+              msg += "<b>🏦 vs IHSG (Buy & Hold)</b>\n"
+              msg += f"  IHSG Return: {metrics.get('Benchmark Return', '?')}\n"
+              msg += f"  Alpha: {metrics.get('Alpha', '?')}\n\n"
+
+          # Verdict
+          try:
+              cagr = float(metrics.get("CAGR", "0").replace("%", "").strip())
+              sharpe = float(metrics.get("Sharpe Ratio", "0").strip())
+              if sharpe > 1.0 and cagr > 10:
+                  msg += "✅ <b>Verdict: Strong results!</b>\n"
+              elif sharpe > 0.5 and cagr > 5:
+                  msg += "🟡 <b>Verdict: Promising, worth monitoring.</b>\n"
+              elif sharpe > 0 and cagr > 0:
+                  msg += "🟠 <b>Verdict: Positive but weak. Consider tuning.</b>\n"
+              else:
+                  msg += "🔴 <b>Verdict: Needs improvement. Run optimisation.</b>\n"
+          except:
+              pass
+
+          msg += "\n📎 <i>Charts saved in GitHub Actions artifacts.</i>\n"
+          msg += "<i>⚠️ Past performance ≠ future results.</i>"
+
+          requests.post(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              json={"chat_id": chat, "text": msg, "parse_mode": "HTML"},
+              timeout=30,
+          )
+          print("Results sent to Telegram!")
+          EOF
+
+      # Send charts to Telegram
+      - name: Send charts to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python << 'EOF'
+          import os, requests
+
+          token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+          chat = os.getenv("TELEGRAM_CHAT_ID", "")
+          if not token or not chat:
+              exit(0)
+
+          charts = [
+              ("reports/equity_curve.png", "Equity curve — your portfolio vs IHSG"),
+              ("reports/drawdown.png", "Drawdown — worst drops from peak"),
+              ("reports/monthly_heatmap.png", "Monthly returns heatmap"),
+              ("reports/trade_distribution.png", "Trade results distribution"),
+          ]
+
+          for filepath, caption in charts:
+              if os.path.exists(filepath):
+                  try:
+                      with open(filepath, "rb") as photo:
+                          requests.post(
+                              f"https://api.telegram.org/bot{token}/sendPhoto",
+                              data={"chat_id": chat, "caption": caption},
+                              files={"photo": photo},
+                              timeout=60,
+                          )
+                      print(f"Sent: {filepath}")
+                  except Exception as e:
+                      print(f"Failed to send {filepath}: {e}")
+          EOF
+
+      - name: Save database
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: idx-database
+          path: idx_swing_trader.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Save reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backtest-reports-${{ github.run_number }}
+          path: reports/
+          retention-days: 90
