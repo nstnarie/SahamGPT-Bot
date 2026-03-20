@@ -138,6 +138,9 @@ class BacktestEngine:
         completed_trades: List[Trade] = []
         pending_entries: Dict[str, float] = {}  # ticker → signal score (for next day entry)
 
+        # FIX 3: Track cooldown — ticker → date when cooldown expires
+        cooldown_until: Dict[str, object] = {}
+
         for i, current_date in enumerate(trading_dates):
             # Gather current prices
             current_prices = {}
@@ -153,7 +156,21 @@ class BacktestEngine:
 
             # ── 1. Execute pending entries (from yesterday's signals) ──
             if pending_entries:
-                for ticker, signal_score in list(pending_entries.items()):
+                # FIX 5: Sort by score descending and limit entries per day
+                sorted_entries = sorted(
+                    pending_entries.items(), key=lambda x: x[1], reverse=True
+                )
+                max_entries = self.config.exit.max_entries_per_day
+                entries_today = 0
+
+                for ticker, signal_score in sorted_entries:
+                    if entries_today >= max_entries:
+                        break
+
+                    # FIX 3: Check cooldown
+                    if ticker in cooldown_until and current_date < cooldown_until[ticker]:
+                        continue
+
                     if ticker in current_data and ticker not in portfolio.positions:
                         row = current_data[ticker]
                         open_price = row.get("open", row["close"])
@@ -197,6 +214,7 @@ class BacktestEngine:
                                 )
                                 portfolio.positions[ticker] = pos
                                 portfolio.cash -= buy["total_cost"]
+                                entries_today += 1
                                 logger.debug(
                                     f"  BUY {ticker}: {shares} shares @ "
                                     f"{buy['exec_price']:.0f}, "
@@ -273,6 +291,13 @@ class BacktestEngine:
                         sector=pos.sector,
                     )
                     completed_trades.append(trade)
+
+                    # FIX 3: Set cooldown after stop-loss
+                    if exit_reason == "STOP_LOSS":
+                        cooldown_days = self.config.exit.stop_loss_cooldown_days
+                        # Find the date N trading days from now
+                        future_idx = min(i + cooldown_days, len(trading_dates) - 1)
+                        cooldown_until[ticker] = trading_dates[future_idx]
 
                     logger.debug(
                         f"  EXIT {ticker}: {shares_to_sell} shares @ "
