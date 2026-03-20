@@ -1,37 +1,43 @@
 """
-Signal Combiner
-================
-Combines market regime, big money detection, and technical confirmation
-into a final BUY / SELL / HOLD signal for each stock on each date.
+Signal Combiner v4 — Breakout + Foreign Flow Confirmation
+============================================================
+COMPLETELY REBUILT. The old "big money score" approach is gone.
 
-Decision tree:
-  1. Market regime = BEAR → no new buys (hold or exit)
-  2. Big money composite score ≥ threshold → candidate
-  3. Technical conditions all pass → BUY signal
-  4. Distribution detected (score < exit threshold) → SELL signal
-  5. Otherwise → HOLD
+New signal logic:
+  1. Market regime ≠ BEAR
+  2. PRIMARY: Price breaks above 20-day high with volume spike
+  3. CONFIRM: Net foreign flow is positive (real data, not synthetic)
+  4. FILTER: RSI not overbought, MACD momentum positive
+  5. All conditions true → BUY
+
+Exit logic:
+  - Stop-loss: -7% or 1.5×ATR (tighter wins), -8% hard cap
+  - Trailing stop at +8% activation
+  - Partial profit: sell 30% at +15%
+  - Time exit: 15 days with no +3% gain
+  - Foreign flow exit: 5 consecutive days of net selling
+  - Regime exit: BEAR → close all
 """
 
 import logging
 from typing import Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 
 from config import FrameworkConfig, DEFAULT_CONFIG
 from signals.market_regime import MarketRegimeFilter
-from signals.big_money import BigMoneyDetector
 from signals.technical import TechnicalAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
 class SignalCombiner:
-    """Combines all signal components into final trading signals."""
+    """Generates BUY/SELL/HOLD signals using breakout + foreign flow."""
 
     def __init__(self, config: FrameworkConfig = DEFAULT_CONFIG):
         self.config = config
         self.regime_filter = MarketRegimeFilter(config.regime)
-        self.big_money = BigMoneyDetector(config.big_money)
         self.technical = TechnicalAnalyzer(config.technical)
 
     def generate_signals(
@@ -43,92 +49,164 @@ class SignalCombiner:
         foreign_flow_df: Optional[pd.DataFrame] = None,
         broker_df: Optional[pd.DataFrame] = None,
     ) -> pd.DataFrame:
-        """
-        Generate daily signals for a single stock.
-
-        Returns DataFrame with columns:
-            All price columns + indicators + scores + signal
-        """
+        """Generate daily signals for a single stock."""
         if price_df.empty:
             return pd.DataFrame()
 
-        # Step 1: Compute market regime for each date
-        regime_df = self.regime_filter.compute_regime_series(
-            ihsg_df, universe_prices
-        )
+        # Step 1: Compute market regime
+        regime_df = self.regime_filter.compute_regime_series(ihsg_df, universe_prices)
 
         # Step 2: Compute technical indicators
         tech_df = self.technical.compute_all_indicators(price_df)
 
-        # Step 3: Compute big money scores
-        scores_df = self.big_money.compute_composite_score(
-            price_df, foreign_flow_df, broker_df
-        )
-
-        # Merge everything
+        # Step 3: Compute breakout signals
         result = tech_df.copy()
-        result = result.join(scores_df, how="left")
+        result = self._add_breakout_signals(result)
 
-        # Align regime data
+        # Step 4: Add foreign flow confirmation
+        result = self._add_foreign_flow_signals(result, foreign_flow_df)
+
+        # Align regime
         if not regime_df.empty:
             result["regime"] = regime_df["regime"].reindex(result.index, method="ffill")
-            result["exposure_mult"] = regime_df["exposure_mult"].reindex(
-                result.index, method="ffill"
-            )
+            result["exposure_mult"] = regime_df["exposure_mult"].reindex(result.index, method="ffill")
         else:
             result["regime"] = "SIDEWAYS"
-            result["exposure_mult"] = self.config.regime.exposure_multiplier["SIDEWAYS"]
+            result["exposure_mult"] = 0.5
 
         result["regime"] = result["regime"].fillna("SIDEWAYS")
         result["exposure_mult"] = result["exposure_mult"].fillna(0.5)
 
-        # Step 4: Generate signals
+        # Step 5: Combine into final signal
         result["signal"] = result.apply(
-            lambda row: self._evaluate_signal(row, ticker), axis=1
+            lambda row: self._evaluate_signal(row), axis=1
         )
 
-        # Step 5: Add technical pass flag
-        result["technical_pass"] = result.apply(
-            lambda row: 1 if self.technical.check_entry_conditions(row) else 0,
-            axis=1,
-        )
+        # Backward compat columns
+        result["composite_score"] = 0.0
+        result["foreign_score"] = 0.0
+        result["volume_price_score"] = 0.0
+        result["broker_score"] = 0.0
+        result["technical_pass"] = result["signal"].apply(lambda x: 1 if x == "BUY" else 0)
 
-        logger.info(
-            f"{ticker}: "
-            f"BUY={( result['signal']=='BUY').sum()}, "
-            f"SELL={(result['signal']=='SELL').sum()}, "
-            f"HOLD={(result['signal']=='HOLD').sum()}"
-        )
+        buy_count = (result["signal"] == "BUY").sum()
+        sell_count = (result["signal"] == "SELL").sum()
+        logger.info(f"{ticker}: BUY={buy_count}, SELL={sell_count}, HOLD={len(result) - buy_count - sell_count}")
 
         return result
 
-    def _evaluate_signal(self, row: pd.Series, ticker: str) -> str:
+    def _add_breakout_signals(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Detect breakout signals.
+        Breakout = close > N-day highest high AND volume spike AND close > MA50
+        """
+        cfg = self.config.breakout
+
+        # 20-day highest high (excluding today — we compare today's close to PRIOR range)
+        df["high_20d"] = df["high"].rolling(cfg.breakout_period, min_periods=cfg.breakout_period).max().shift(1)
+
+        # MA50 for trend
+        df["ma_50"] = df["close"].rolling(cfg.trend_ma_period, min_periods=30).mean()
+
+        # Volume ratio
+        df["vol_avg_20"] = df["volume"].rolling(20, min_periods=5).mean()
+        df["vol_ratio"] = df["volume"] / df["vol_avg_20"].replace(0, np.nan)
+        df["vol_ratio"] = df["vol_ratio"].fillna(1.0)
+
+        # Breakout conditions
+        df["is_breakout"] = (
+            (df["close"] > df["high_20d"]) &                    # new 20-day high
+            (df["vol_ratio"] >= cfg.volume_spike_min) &          # volume spike
+            (df["vol_ratio"] <= cfg.volume_spike_max) &          # not a pump-and-dump
+            (df["close"] > df["ma_50"]) &                        # above MA50
+            (df["high_20d"].notna())                             # enough data
+        )
+
+        return df
+
+    def _add_foreign_flow_signals(
+        self, df: pd.DataFrame, ff_df: Optional[pd.DataFrame]
+    ) -> pd.DataFrame:
+        """
+        Add foreign flow confirmation signals.
+        Uses REAL net foreign data, not synthetic estimates.
+        """
+        cfg = self.config.foreign_flow
+
+        if ff_df is None or ff_df.empty:
+            # No foreign flow data → no confirmation filter (breakout alone)
+            df["ff_confirmed"] = True
+            df["ff_consecutive_sell"] = 0
+            logger.debug("No foreign flow data — skipping FF confirmation")
+            return df
+
+        # Merge foreign flow with price data
+        if "net_foreign_value" in ff_df.columns:
+            ff_series = ff_df["net_foreign_value"].reindex(df.index, method="ffill")
+        else:
+            ff_series = pd.Series(0.0, index=df.index)
+
+        df["net_foreign"] = ff_series.fillna(0)
+
+        # Is today a net foreign buy day?
+        df["ff_positive"] = (df["net_foreign"] > cfg.min_net_foreign_value).astype(int)
+
+        # Rolling count: how many of the past N days were positive?
+        df["ff_positive_count"] = df["ff_positive"].rolling(
+            cfg.lookback_days, min_periods=1
+        ).sum()
+
+        # Confirmation: at least min_positive_days of the past lookback_days
+        df["ff_confirmed"] = df["ff_positive_count"] >= cfg.min_positive_days
+
+        # For exit: count consecutive net foreign sell days
+        df["ff_is_sell"] = (df["net_foreign"] < -cfg.min_net_foreign_value).astype(int)
+        # Count consecutive sell days
+        groups = (df["ff_is_sell"] != df["ff_is_sell"].shift()).cumsum()
+        df["ff_consecutive_sell"] = df["ff_is_sell"].groupby(groups).cumsum()
+
+        return df
+
+    def _evaluate_signal(self, row: pd.Series) -> str:
         """
         Evaluate signal for a single row.
 
-        Logic:
-          - If regime is BEAR and exposure_mult is 0 → SELL (exit)
-          - If composite_score < exit_threshold → SELL (distribution)
-          - If regime allows entry AND composite_score ≥ entry_threshold
-            AND technical conditions pass → BUY
-          - Otherwise → HOLD
+        BUY requires ALL of:
+          1. Regime is not BEAR (exposure_mult > 0)
+          2. Breakout detected (is_breakout = True)
+          3. Foreign flow confirmed (ff_confirmed = True)
+          4. RSI in range (40-75)
+          5. MACD momentum positive (histogram > 0)
+
+        SELL if:
+          - Regime is BEAR
+          - Foreign flow heavily negative (5+ consecutive sell days)
         """
         regime = row.get("regime", "SIDEWAYS")
         exposure = row.get("exposure_mult", 0.5)
-        composite = row.get("composite_score", 0.5)
 
-        # SELL conditions (checked first)
+        # SELL conditions
         if exposure == 0.0:
             return "SELL"
 
-        if composite < self.config.big_money.score_exit_threshold:
+        ff_consec_sell = row.get("ff_consecutive_sell", 0)
+        if ff_consec_sell >= self.config.foreign_flow.exit_consecutive_sell_days:
             return "SELL"
 
-        # BUY conditions
+        # BUY conditions — ALL must be true
         if exposure > 0:
-            if composite >= self.config.entry.min_big_money_score:
-                if self.technical.check_entry_conditions(row):
-                    return "BUY"
+            is_breakout = row.get("is_breakout", False)
+            ff_confirmed = row.get("ff_confirmed", False)
+            rsi = row.get("rsi", 50)
+            macd_hist = row.get("macd_histogram", 0)
+
+            if (
+                is_breakout
+                and ff_confirmed
+                and self.config.technical.rsi_min <= rsi <= self.config.technical.rsi_max
+                and macd_hist > 0
+            ):
+                return "BUY"
 
         return "HOLD"
 
@@ -139,14 +217,9 @@ class SignalCombiner:
         foreign_flows: Optional[Dict[str, pd.DataFrame]] = None,
         broker_data: Optional[Dict[str, pd.DataFrame]] = None,
     ) -> Dict[str, pd.DataFrame]:
-        """
-        Generate signals for all stocks in the universe.
-
-        Returns dict of ticker → signal DataFrame.
-        """
+        """Generate signals for all stocks in the universe."""
         foreign_flows = foreign_flows or {}
         broker_data = broker_data or {}
-
         all_signals = {}
 
         for ticker, price_df in universe_prices.items():
@@ -160,7 +233,6 @@ class SignalCombiner:
                     broker_df=broker_data.get(ticker),
                 )
                 all_signals[ticker] = sig_df
-
             except Exception as e:
                 logger.error(f"Error generating signals for {ticker}: {e}")
                 continue
