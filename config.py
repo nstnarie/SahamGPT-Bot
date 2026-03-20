@@ -148,8 +148,8 @@ class BigMoneyConfig:
     weight_broker_summary: float = 0.30
 
     # Minimum composite score to trigger "big money detected"
-    # FIX 2: Raised from 0.55 to 0.70 — fewer but higher-conviction entries
-    score_entry_threshold: float = 0.70
+    # v3: Raised to 0.75 — combined with 2-day confirmation for quality entries
+    score_entry_threshold: float = 0.75
     # Score below which we consider distribution (exit signal)
     score_exit_threshold: float = 0.25
 
@@ -184,11 +184,19 @@ class TechnicalConfig:
 @dataclass
 class EntryConfig:
     # Minimum big-money composite score to enter
-    # FIX 2: Raised from 0.55 to 0.70 for higher-conviction entries
-    min_big_money_score: float = 0.70
+    # v3: Raised to 0.75 — quality over quantity
+    min_big_money_score: float = 0.75
 
     # Entry timing: "close" = enter at session close, "next_open" = next day open
     entry_timing: str = "next_open"
+
+    # Fix A: Require signal to persist for N consecutive days before entering
+    # This filters out 1-day volume spikes that aren't real institutional flow
+    signal_confirmation_days: int = 2
+
+    # Fix C: Skip entry if open gaps down more than this % from prior close
+    # Gap-downs mean something changed overnight — signal is stale
+    max_gap_down_pct: float = 0.02  # -2%
 
 
 # ──────────────────────────────────────────────────────────────
@@ -233,29 +241,30 @@ class PositionSizingConfig:
 @dataclass
 class ExitConfig:
     # --- Initial stop-loss ---
-    # FIX 1: Hard cap at -5%. ATR stop is used ONLY if tighter than -5%.
-    # The old -7% with ATR override was letting losses balloon to -15%+
-    stop_loss_pct: float = 0.05       # -5 % HARD CAP (was 0.07)
-    stop_loss_atr_mult: float = 1.5   # 1.5 × ATR (was 2.0, tighter now)
+    # v3 Fix B: Revert to -7% base, but with -8% HARD CAP
+    # IDX stocks swing 3-5% intraday — -5% was too tight, killed good trades
+    # ATR stop used if tighter than -7%; absolute max loss capped at -8%
+    stop_loss_pct: float = 0.07       # -7% base stop (reverted from 0.05)
+    stop_loss_atr_mult: float = 1.5   # 1.5 × ATR
+    stop_loss_hard_cap: float = 0.08  # NEW: -8% absolute maximum loss, no exceptions
 
     # --- Trailing stop ---
-    # FIX 4: Tighter trail to lock in profits instead of partial selling
-    trailing_activation_pct: float = 0.08  # +8 % (was 0.10)
+    trailing_activation_pct: float = 0.08  # +8% activates trailing
     # Trail at this ATR multiple below highest close since entry
-    trailing_atr_mult: float = 2.0         # (was 2.5, tighter)
+    trailing_atr_mult: float = 2.0
     # Or trail below this EMA (whichever is tighter)
     trailing_ema: int = 20
 
     # --- Partial profit taking ---
-    # FIX 4: DISABLED — let winners run with trailing stop instead
-    # Old: sell 50% at +15% was cutting best trades in half
-    partial_sell_fraction: float = 0.0  # DISABLED (was 0.50)
-    partial_target_pct: float = 0.15    # (doesn't matter when fraction=0)
+    # v3 Fix D: Re-enable at 30% (was 50% originally, then 0%)
+    # Take some profit to lock in gains, but let 70% ride
+    partial_sell_fraction: float = 0.30  # sell 30% at target
+    partial_target_pct: float = 0.15     # at +15%
 
     # --- Time-based exit ---
-    # Exit if stock hasn't moved +X % within Y trading days
-    time_exit_min_gain: float = 0.03  # +3 % (was 0.05, more lenient)
-    time_exit_max_days: int = 15      # 15 trading days (was 20, faster exit of dead money)
+    # Exit if stock hasn't moved +X% within Y trading days
+    time_exit_min_gain: float = 0.03  # +3%
+    time_exit_max_days: int = 15      # 15 trading days
 
     # --- Big money exit ---
     # If composite score drops below this, exit
@@ -265,11 +274,11 @@ class ExitConfig:
     # If market goes BEAR, close this fraction of all positions
     bear_regime_close_fraction: float = 1.0  # close everything
 
-    # --- FIX 3: Cooldown after stop-loss ---
+    # --- Cooldown after stop-loss ---
     # Don't re-enter a stock for N days after getting stopped out
     stop_loss_cooldown_days: int = 30
 
-    # --- FIX 5: Max new entries per day ---
+    # --- Max new entries per day ---
     max_entries_per_day: int = 3
 
 
