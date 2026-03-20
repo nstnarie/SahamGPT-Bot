@@ -141,6 +141,10 @@ class BacktestEngine:
         # FIX 3: Track cooldown — ticker → date when cooldown expires
         cooldown_until: Dict[str, object] = {}
 
+        # Fix A: Track consecutive signal days per ticker
+        # ticker → count of consecutive days with BUY signal
+        consecutive_signal_days: Dict[str, int] = {}
+
         for i, current_date in enumerate(trading_dates):
             # Gather current prices
             current_prices = {}
@@ -174,6 +178,25 @@ class BacktestEngine:
                     if ticker in current_data and ticker not in portfolio.positions:
                         row = current_data[ticker]
                         open_price = row.get("open", row["close"])
+
+                        # Fix C: Skip if open gaps down > 2% from prior close
+                        # This means something changed overnight — signal is stale
+                        if i > 0:
+                            prev_date = trading_dates[i - 1]
+                            prev_close = current_prices.get(ticker)
+                            # Get yesterday's close from the price df
+                            ticker_df = universe_prices.get(ticker)
+                            if ticker_df is not None and prev_date in ticker_df.index:
+                                prev_close = ticker_df.loc[prev_date]["close"]
+                                if prev_close > 0:
+                                    gap_pct = (open_price - prev_close) / prev_close
+                                    if gap_pct < -self.config.entry.max_gap_down_pct:
+                                        logger.debug(
+                                            f"  SKIP {ticker}: gap down {gap_pct:.1%} "
+                                            f"at open (limit: -{self.config.entry.max_gap_down_pct:.0%})"
+                                        )
+                                        continue
+
                         sig_df = all_signals.get(ticker)
                         atr = 0.0
                         if sig_df is not None and current_date in sig_df.index:
@@ -314,6 +337,10 @@ class BacktestEngine:
                 del portfolio.positions[t]
 
             # ── 3. Generate entry signals for tomorrow ──
+            # Fix A: Track consecutive signal days — only enter after N consecutive BUY signals
+            required_days = self.config.entry.signal_confirmation_days
+            tickers_with_signal_today = set()
+
             for ticker, sig_df in all_signals.items():
                 if ticker in portfolio.positions:
                     continue  # already in position
@@ -324,7 +351,18 @@ class BacktestEngine:
 
                 sig_row = sig_df.loc[current_date]
                 if sig_row.get("signal") == "BUY":
-                    pending_entries[ticker] = sig_row.get("composite_score", 0)
+                    tickers_with_signal_today.add(ticker)
+                    # Increment consecutive day counter
+                    consecutive_signal_days[ticker] = consecutive_signal_days.get(ticker, 0) + 1
+
+                    # Only promote to pending entry if signal persisted N days
+                    if consecutive_signal_days[ticker] >= required_days:
+                        pending_entries[ticker] = sig_row.get("composite_score", 0)
+
+            # Reset counter for tickers that lost their BUY signal today
+            for ticker in list(consecutive_signal_days.keys()):
+                if ticker not in tickers_with_signal_today:
+                    consecutive_signal_days[ticker] = 0
 
             # ── 4. Record equity ──
             portfolio.update_equity(current_prices)
