@@ -174,9 +174,6 @@ class PortfolioManager:
         raw_shares = min(raw_shares, max_shares_by_cash)
 
         # Step 7: Round to lot
-        # Guard against NaN from missing data
-        if raw_shares != raw_shares or raw_shares <= 0:  # NaN check
-            return 0
         shares = round_to_lot(int(raw_shares))
 
         return shares
@@ -186,13 +183,14 @@ class PortfolioManager:
     ) -> float:
         """
         Calculate initial stop-loss price.
-        Uses the wider of: fixed % stop OR ATR-based stop.
+        FIX 1: Uses the TIGHTER stop (higher price = less loss).
+        Hard cap at stop_loss_pct (5%). ATR stop only used if tighter.
         """
         pct_stop = entry_price * (1 - self.exits.stop_loss_pct)
         atr_stop = entry_price - (self.exits.stop_loss_atr_mult * atr)
-        # Use the tighter stop (higher price = closer stop = less risk)
-        # Actually the prompt says "whichever is wider" for safety — let's use wider
-        initial_stop = min(pct_stop, atr_stop)
+        # Use the TIGHTER stop (higher price = closer stop = less risk)
+        # This was the bug — old code used min() which picks the WIDER stop
+        initial_stop = max(pct_stop, atr_stop)
 
         # Ensure stop is positive
         tick = get_tick_size(entry_price)
