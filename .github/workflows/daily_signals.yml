@@ -1,1 +1,64 @@
+name: Daily IDX Signals
 
+on:
+  schedule:
+    - cron: "35 9 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  daily-signals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download database from previous run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: idx-database
+          path: .
+          if_no_artifact_found: warn
+          workflow_conclusion: ""
+          search_artifacts: true
+        continue-on-error: true
+
+      - name: Run daily signal pipeline
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python main_daily.py --top 5
+
+      - name: Save database
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: idx-database
+          path: idx_swing_trader.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Save run log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: daily-log-${{ github.run_number }}
+          path: daily_pipeline.log
+          retention-days: 30
