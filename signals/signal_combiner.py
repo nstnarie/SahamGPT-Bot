@@ -129,15 +129,21 @@ class SignalCombiner:
     ) -> pd.DataFrame:
         """
         Add foreign flow confirmation signals.
-        Uses REAL net foreign data, not synthetic estimates.
+        
+        SMART FILTERING: Automatically detects if a stock is foreign-driven
+        or domestic-driven based on the actual foreign flow data.
+        
+        - Foreign-driven stocks (meaningful FF activity): require FF confirmation
+        - Domestic-driven stocks (minimal FF activity): skip FF filter,
+          use breakout signal alone
         """
         cfg = self.config.foreign_flow
 
         if ff_df is None or ff_df.empty:
-            # No foreign flow data → no confirmation filter (breakout alone)
+            # No foreign flow data at all → breakout alone
             df["ff_confirmed"] = True
             df["ff_consecutive_sell"] = 0
-            logger.debug("No foreign flow data — skipping FF confirmation")
+            df["is_foreign_driven"] = False
             return df
 
         # Merge foreign flow with price data
@@ -148,6 +154,18 @@ class SignalCombiner:
 
         df["net_foreign"] = ff_series.fillna(0)
 
+        # ── AUTO-DETECT: Is this stock foreign-driven? ──
+        # Compute the ratio of average |net foreign value| to average traded value
+        # If foreigners barely trade it, the ratio will be near zero
+        avg_ff_activity = df["net_foreign"].abs().rolling(60, min_periods=20).mean()
+        avg_traded_value = (df["close"] * df["volume"]).rolling(60, min_periods=20).mean()
+        ff_ratio = avg_ff_activity / avg_traded_value.replace(0, np.nan)
+        ff_ratio = ff_ratio.fillna(0)
+
+        # If foreign activity is > 5% of traded value → foreign-driven
+        # If < 5% → domestic-driven, skip FF filter
+        df["is_foreign_driven"] = ff_ratio > 0.05
+
         # Is today a net foreign buy day?
         df["ff_positive"] = (df["net_foreign"] > cfg.min_net_foreign_value).astype(int)
 
@@ -156,14 +174,25 @@ class SignalCombiner:
             cfg.lookback_days, min_periods=1
         ).sum()
 
-        # Confirmation: at least min_positive_days of the past lookback_days
-        df["ff_confirmed"] = df["ff_positive_count"] >= cfg.min_positive_days
+        # Confirmation logic:
+        # - Foreign-driven stocks: require min_positive_days of lookback_days
+        # - Domestic-driven stocks: always confirmed (breakout alone is sufficient)
+        ff_meets_threshold = df["ff_positive_count"] >= cfg.min_positive_days
+        df["ff_confirmed"] = df["is_foreign_driven"].apply(
+            lambda x: True if not x else None  # domestic → always True
+        )
+        # Fill in foreign-driven rows with actual FF check
+        mask_foreign = df["is_foreign_driven"] == True
+        df.loc[mask_foreign, "ff_confirmed"] = ff_meets_threshold[mask_foreign]
+        df["ff_confirmed"] = df["ff_confirmed"].fillna(True).astype(bool)
 
         # For exit: count consecutive net foreign sell days
+        # Only applies to foreign-driven stocks
         df["ff_is_sell"] = (df["net_foreign"] < -cfg.min_net_foreign_value).astype(int)
-        # Count consecutive sell days
         groups = (df["ff_is_sell"] != df["ff_is_sell"].shift()).cumsum()
         df["ff_consecutive_sell"] = df["ff_is_sell"].groupby(groups).cumsum()
+        # Domestic-driven stocks: don't trigger FF exit
+        df.loc[~df["is_foreign_driven"], "ff_consecutive_sell"] = 0
 
         return df
 
