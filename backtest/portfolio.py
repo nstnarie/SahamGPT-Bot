@@ -183,14 +183,17 @@ class PortfolioManager:
     ) -> float:
         """
         Calculate initial stop-loss price.
-        FIX 1: Uses the TIGHTER stop (higher price = less loss).
-        Hard cap at stop_loss_pct (5%). ATR stop only used if tighter.
+        v3 Fix B: Use tighter of -7% or 1.5×ATR, with -8% hard cap.
+        No trade can ever lose more than 8%.
         """
         pct_stop = entry_price * (1 - self.exits.stop_loss_pct)
         atr_stop = entry_price - (self.exits.stop_loss_atr_mult * atr)
-        # Use the TIGHTER stop (higher price = closer stop = less risk)
-        # This was the bug — old code used min() which picks the WIDER stop
+        # Use the TIGHTER stop (higher price = less risk)
         initial_stop = max(pct_stop, atr_stop)
+
+        # Hard cap: stop can never be below -8% from entry
+        hard_cap_price = entry_price * (1 - self.exits.stop_loss_hard_cap)
+        initial_stop = max(initial_stop, hard_cap_price)
 
         # Ensure stop is positive
         tick = get_tick_size(entry_price)
