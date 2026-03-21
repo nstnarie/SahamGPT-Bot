@@ -53,13 +53,14 @@ jobs:
 
           logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-          from database.schema import get_session, create_all_tables
+          from config import DATABASE_URL
+          from database.schema import create_all_tables, get_session
           from scraper.price_scraper import LQ45_TICKERS
           from scraper.broker_scraper import StockbitBrokerScraper
 
-          # Create tables if needed
-          create_all_tables()
-          session = get_session()
+          # Create tables
+          engine = create_all_tables(DATABASE_URL)
+          session = get_session(engine)
 
           # Select ticker batch (to stay within GitHub Actions time limit)
           batch = "${{ github.event.inputs.batch }}"
