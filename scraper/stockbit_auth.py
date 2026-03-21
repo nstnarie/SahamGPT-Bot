@@ -50,7 +50,22 @@ def get_stockbit_token(
         JWT token string (without "Bearer " prefix), or None on failure.
     """
     from playwright.sync_api import sync_playwright
-    from playwright_stealth import stealth_sync
+
+    # Handle different playwright-stealth versions
+    stealth_available = False
+    stealth_sync_fn = None
+    try:
+        # Old API (playwright-stealth2, tf-playwright-stealth)
+        from playwright_stealth import stealth_sync as _stealth_sync
+        stealth_sync_fn = _stealth_sync
+        stealth_available = True
+    except ImportError:
+        try:
+            # New API (playwright-stealth >= 2.0)
+            from playwright_stealth import Stealth
+            stealth_available = True
+        except ImportError:
+            stealth_available = False
 
     username = username or os.getenv("STOCKBIT_USERNAME", "")
     password = password or os.getenv("STOCKBIT_PASSWORD", "")
@@ -86,7 +101,19 @@ def get_stockbit_token(
             page = context.new_page()
 
             # Apply stealth to avoid bot detection
-            stealth_sync(page)
+            if stealth_available:
+                if stealth_sync_fn:
+                    # Old API: stealth_sync(page)
+                    stealth_sync_fn(page)
+                else:
+                    # New API: Stealth class
+                    try:
+                        stealth = Stealth()
+                        stealth.apply_stealth_sync(context)
+                    except Exception as e:
+                        logger.warning(f"Stealth apply failed: {e}. Continuing without stealth.")
+            else:
+                logger.warning("No stealth plugin available. Bot detection may trigger.")
 
             # Capture the auth token from API responses
             captured_token = {"value": None}
