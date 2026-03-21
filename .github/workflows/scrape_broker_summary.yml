@@ -114,3 +114,8 @@ jobs:
           path: idx_swing_trader.db
           retention-days: 90
           overwrite: true
+
+      - name: Verify scraped data
+        run: |
+          cd $GITHUB_WORKSPACE
+          python3 verify_broker_data.py
