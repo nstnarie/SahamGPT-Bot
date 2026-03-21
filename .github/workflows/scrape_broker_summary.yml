@@ -32,7 +32,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install requests
+          pip install requests playwright playwright-stealth
+          playwright install chromium --with-deps
 
       - name: Restore database
         uses: actions/download-artifact@v4
