@@ -114,7 +114,20 @@ class StockbitBrokerScraper:
         if username and password:
             logger.info("Attempting Playwright auto-login...")
             try:
-                from scraper.stockbit_auth import get_stockbit_token
+                # Direct import to avoid scraper/__init__.py chain issues
+                import importlib.util
+                import pathlib
+                auth_path = pathlib.Path(__file__).parent / "stockbit_auth.py"
+                spec = importlib.util.spec_from_file_location("stockbit_auth", str(auth_path))
+                stockbit_auth = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(stockbit_auth)
+                get_stockbit_token = stockbit_auth.get_stockbit_token
+            except Exception as e:
+                logger.error(f"Failed to load stockbit_auth: {type(e).__name__}: {e}")
+                logger.error("Ensure playwright and playwright-stealth are installed")
+                return False
+
+            try:
                 token = get_stockbit_token(username, password)
                 if token:
                     self.token = token
@@ -129,13 +142,8 @@ class StockbitBrokerScraper:
                 else:
                     logger.error("Playwright login failed to capture token")
                     return False
-            except ImportError:
-                logger.error(
-                    "Playwright not installed. Run: pip install playwright playwright-stealth && playwright install chromium"
-                )
-                return False
             except Exception as e:
-                logger.error(f"Playwright login error: {e}")
+                logger.error(f"Playwright login error: {type(e).__name__}: {e}")
                 return False
 
         logger.error(
