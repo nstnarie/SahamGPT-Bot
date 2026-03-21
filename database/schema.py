@@ -87,6 +87,7 @@ class BrokerSummary(Base):
     ticker = Column(String(10), nullable=False, index=True)
     date = Column(Date, nullable=False, index=True)
     broker_code = Column(String(10), nullable=False, index=True)
+    broker_type = Column(String(20), default="")  # "Asing", "Lokal", "Pemerintah"
     buy_value = Column(Float, default=0)
     sell_value = Column(Float, default=0)
     buy_volume = Column(Float, default=0)
