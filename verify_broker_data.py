@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def verify():
+    from config import DATABASE_URL
     from database.schema import get_session, BrokerSummary, create_all_tables
     
-    create_all_tables()
-    session = get_session()
+    engine = create_all_tables(DATABASE_URL)
+    session = get_session(engine)
 
     # 1. Basic counts
     total_records = session.query(BrokerSummary).count()
