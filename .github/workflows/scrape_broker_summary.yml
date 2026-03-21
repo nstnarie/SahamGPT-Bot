@@ -32,8 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install requests playwright tf-playwright-stealth
-          playwright install chromium --with-deps
+          pip install requests
 
       - name: Restore database
         uses: actions/download-artifact@v4
@@ -44,8 +43,7 @@ jobs:
 
       - name: Run historical broker summary scrape
         env:
-          STOCKBIT_USERNAME: ${{ secrets.STOCKBIT_USERNAME }}
-          STOCKBIT_PASSWORD: ${{ secrets.STOCKBIT_PASSWORD }}
+          STOCKBIT_TOKEN: ${{ secrets.STOCKBIT_TOKEN }}
         run: |
           python3 << 'EOF'
           import os
@@ -116,15 +114,6 @@ jobs:
           path: idx_swing_trader.db
           retention-days: 90
           overwrite: true
-
-      - name: Upload debug screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: stockbit-debug-screenshots
-          path: /tmp/sb_*.png
-          retention-days: 7
-        continue-on-error: true
 
       - name: Verify scraped data
         run: |
