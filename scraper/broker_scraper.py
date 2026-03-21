@@ -84,74 +84,44 @@ class StockbitBrokerScraper:
 
     def login(self) -> bool:
         """
-        Authenticate with Stockbit. Tries in order:
-          1. Use STOCKBIT_TOKEN env var if set (manual token)
-          2. Auto-login via Playwright using STOCKBIT_USERNAME + STOCKBIT_PASSWORD
+        Authenticate using a Bearer token from your Stockbit session.
 
-        For GitHub Actions, set username + password in secrets.
-        Playwright handles reCAPTCHA v3 automatically.
+        How to get the token (takes 30 seconds):
+          1. Open stockbit.com in Chrome (you're already logged in)
+          2. Go to any stock page, e.g. stockbit.com/symbol/BBCA/chartbit
+          3. Press F12 → Network tab → click any exodus.stockbit.com request
+          4. Copy the Authorization header value (starts with "Bearer eyJ...")
+          5. Go to GitHub → Settings → Secrets → update STOCKBIT_TOKEN
+
+        Token lasts ~24 hours. Refresh before each batch scrape run.
         """
-        # Method 1: Direct token
-        if self.token:
-            clean_token = self.token.strip()
-            if clean_token.lower().startswith("bearer "):
-                clean_token = clean_token[7:].strip()
+        if not self.token:
+            logger.error(
+                "STOCKBIT_TOKEN not set.\n"
+                "How to get it:\n"
+                "  1. Open stockbit.com/symbol/BBCA/chartbit in Chrome\n"
+                "  2. F12 → Network → click any exodus.stockbit.com request\n"
+                "  3. Copy Authorization header value\n"
+                "  4. Set as STOCKBIT_TOKEN in GitHub Secrets"
+            )
+            return False
 
-            self.session.headers["Authorization"] = f"Bearer {clean_token}"
+        clean_token = self.token.strip()
+        if clean_token.lower().startswith("bearer "):
+            clean_token = clean_token[7:].strip()
 
-            # Verify token
-            if self._verify_token():
-                self.logged_in = True
-                logger.info("Authenticated with provided token")
-                return True
-            else:
-                logger.warning("Provided token is invalid/expired. Trying Playwright login...")
+        self.session.headers["Authorization"] = f"Bearer {clean_token}"
 
-        # Method 2: Auto-login via Playwright
-        username = os.getenv("STOCKBIT_USERNAME", "")
-        password = os.getenv("STOCKBIT_PASSWORD", "")
-
-        if username and password:
-            logger.info("Attempting Playwright auto-login...")
-            try:
-                # Direct import to avoid scraper/__init__.py chain issues
-                import importlib.util
-                import pathlib
-                auth_path = pathlib.Path(__file__).parent / "stockbit_auth.py"
-                spec = importlib.util.spec_from_file_location("stockbit_auth", str(auth_path))
-                stockbit_auth = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(stockbit_auth)
-                get_stockbit_token = stockbit_auth.get_stockbit_token
-            except Exception as e:
-                logger.error(f"Failed to load stockbit_auth: {type(e).__name__}: {e}")
-                logger.error("Ensure playwright and playwright-stealth are installed")
-                return False
-
-            try:
-                token = get_stockbit_token(username, password)
-                if token:
-                    self.token = token
-                    self.session.headers["Authorization"] = f"Bearer {token}"
-                    if self._verify_token():
-                        self.logged_in = True
-                        logger.info("Authenticated via Playwright auto-login")
-                        return True
-                    else:
-                        logger.error("Playwright got a token but it doesn't work")
-                        return False
-                else:
-                    logger.error("Playwright login failed to capture token")
-                    return False
-            except Exception as e:
-                logger.error(f"Playwright login error: {type(e).__name__}: {e}")
-                return False
-
-        logger.error(
-            "No auth method available. Set either:\n"
-            "  - STOCKBIT_TOKEN (manual Bearer token), or\n"
-            "  - STOCKBIT_USERNAME + STOCKBIT_PASSWORD (auto-login via Playwright)"
-        )
-        return False
+        if self._verify_token():
+            self.logged_in = True
+            logger.info("Stockbit token verified — authenticated successfully")
+            return True
+        else:
+            logger.error(
+                "Token is invalid or expired.\n"
+                "Refresh it: stockbit.com → F12 → Network → copy new Authorization header"
+            )
+            return False
 
     def _verify_token(self) -> bool:
         """Quick test to check if the current token works."""
