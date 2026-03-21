@@ -1,10 +1,7 @@
 """
-IDX Swing Trading Framework — Configuration v4
+IDX Swing Trading Framework — Configuration v5
 =================================================
-REBUILT: Breakout detection + real foreign flow confirmation.
-Based on SahamGPT proven rules from 16 backtest iterations.
-
-DISCLAIMER: For educational and research purposes only.
+Breakout + foreign flow + historical resistance + trend-following exit.
 """
 
 from dataclasses import dataclass, field
@@ -17,7 +14,7 @@ DATABASE_URL = os.getenv("IDX_DB_URL", "sqlite:///idx_swing_trader.db")
 LOT_SIZE = 100
 
 TRADING_HOURS = {
-    "pre_open":  ("08:45", "09:00"),
+    "pre_open": ("08:45", "09:00"),
     "session_1": ("09:00", "12:00"),
     "session_2": ("13:30", "16:15"),
 }
@@ -42,6 +39,9 @@ class UniverseConfig:
     max_spread_pct: Optional[float] = 0.02
     excluded_sectors: List[str] = field(default_factory=list)
 
+    # NEW: Minimum stock price filter — exclude junk/penny stocks
+    min_stock_price: float = 150.0
+
 
 @dataclass
 class MarketRegimeConfig:
@@ -56,57 +56,39 @@ class MarketRegimeConfig:
     })
 
 
-# ──────────────────────────────────────────────────────────────
-# BREAKOUT DETECTION (PRIMARY SIGNAL)
-# ──────────────────────────────────────────────────────────────
-
 @dataclass
 class BreakoutConfig:
     """
-    Primary entry signal: price breaks above consolidation range
-    with volume confirmation. This is observable fact, not estimation.
+    Primary entry: breakout above HISTORICAL resistance, not just 20-day high.
+    
+    NEW in v5: Uses 60-day high as resistance level instead of 20-day.
+    This means we only enter when the stock breaks a more significant 
+    price level — a real resistance break, not just a minor swing high.
     """
-    # Close must exceed the N-day highest high
-    breakout_period: int = 20
+    # Break above N-day highest high (historical resistance)
+    breakout_period: int = 60  # 60-day high = ~3 months of resistance (was 20)
 
     # Volume spike on breakout day
-    volume_spike_min: float = 1.5   # minimum 1.5x average
-    volume_spike_max: float = 5.0   # cap at 5x (filter pump-and-dumps)
+    volume_spike_min: float = 1.5
+    volume_spike_max: float = 5.0
 
-    # Price must be above this MA (uptrend confirmation)
+    # Price must be above this MA
     trend_ma_period: int = 50
 
 
-# ──────────────────────────────────────────────────────────────
-# FOREIGN FLOW CONFIRMATION (SECONDARY FILTER)
-# ──────────────────────────────────────────────────────────────
-
 @dataclass
 class ForeignFlowConfig:
-    """
-    Confirms that smart money is behind the breakout.
-    Uses REAL foreign flow data, not synthetic estimates.
-    """
-    # Net foreign buy must be positive on at least N of past M days
     lookback_days: int = 5
-    min_positive_days: int = 3  # at least 3 of 5 days = net foreign buy
-
-    # Minimum net foreign value (Rp) to count as meaningful
+    min_positive_days: int = 3
     min_net_foreign_value: float = 0
-
-    # For exit: consecutive days of net foreign selling triggers exit
     exit_consecutive_sell_days: int = 5
 
-
-# ──────────────────────────────────────────────────────────────
-# TECHNICAL FILTERS
-# ──────────────────────────────────────────────────────────────
 
 @dataclass
 class TechnicalConfig:
     rsi_period: int = 14
     rsi_min: float = 40.0
-    rsi_max: float = 75.0   # higher ceiling for breakouts
+    rsi_max: float = 75.0
     macd_fast: int = 12
     macd_slow: int = 26
     macd_signal: int = 9
@@ -114,25 +96,18 @@ class TechnicalConfig:
     entry_volume_multiplier: float = 1.5
 
 
-# ──────────────────────────────────────────────────────────────
-# ENTRY RULES
-# ──────────────────────────────────────────────────────────────
-
 @dataclass
 class EntryConfig:
     entry_timing: str = "next_open"
-    signal_confirmation_days: int = 1  # breakouts are events, no delay
+    signal_confirmation_days: int = 1
     max_gap_down_pct: float = 0.02
-    min_big_money_score: float = 0.0  # not used in v4
+    min_big_money_score: float = 0.0
 
-
-# ──────────────────────────────────────────────────────────────
-# POSITION SIZING
-# ──────────────────────────────────────────────────────────────
 
 @dataclass
 class PositionSizingConfig:
-    risk_per_trade: float = 0.02
+    # Reduced from 2% to 1.5% because we hold through early volatility now
+    risk_per_trade: float = 0.015
     atr_period: int = 14
     atr_stop_multiple: float = 2.0
     max_position_pct: float = 0.15
@@ -142,31 +117,49 @@ class PositionSizingConfig:
     settlement_buffer: float = 0.05
 
 
-# ──────────────────────────────────────────────────────────────
-# EXIT RULES
-# ──────────────────────────────────────────────────────────────
-
 @dataclass
 class ExitConfig:
+    # Stop-loss (only fires AFTER min_hold_days)
     stop_loss_pct: float = 0.07
     stop_loss_atr_mult: float = 1.5
-    stop_loss_hard_cap: float = 0.08
+    stop_loss_hard_cap: float = 0.10  # widened to 10% since we hold through early vol
 
+    # NEW: Minimum hold period — stop-loss does NOT fire during this period
+    # Data shows trades that survive 5 days have 49% win rate vs 7% for days 1-5
+    min_hold_days: int = 5
+
+    # NEW: Emergency stop — even during hold period, exit if loss exceeds this
+    # This prevents catastrophic damage from gap-downs during hold period
+    emergency_stop_pct: float = 0.15  # -15% = something is seriously wrong
+
+    # Trailing stop
     trailing_activation_pct: float = 0.08
     trailing_atr_mult: float = 2.0
     trailing_ema: int = 20
 
+    # Partial profit: sell 30% at +15%
     partial_sell_fraction: float = 0.30
     partial_target_pct: float = 0.15
 
+    # NEW: Trend-following exit for high-performers
+    # Instead of trailing stop, use MA break as exit signal
+    # If stock gained > trend_threshold, switch to trend exit mode:
+    # only exit when price closes below trend_exit_ma
+    trend_threshold_pct: float = 0.15  # +15% gain triggers trend mode
+    trend_exit_ma: int = 10  # exit when close < 10-day MA (short-term trend)
+
+    # Time exit
     time_exit_min_gain: float = 0.03
     time_exit_max_days: int = 15
 
+    # Regime exit
     bear_regime_close_fraction: float = 1.0
+
+    # Cooldown
     stop_loss_cooldown_days: int = 30
     max_entries_per_day: int = 3
 
-    # Kept for backward compat
+    # Compat
     big_money_exit_score: float = 0.0
 
 
@@ -189,7 +182,6 @@ class ScraperConfig:
     data_dir: str = "data_raw"
 
 
-# Backward compat stub — not used in v4 signal logic
 @dataclass
 class BigMoneyConfig:
     score_entry_threshold: float = 0.0
