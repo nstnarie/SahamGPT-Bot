@@ -117,6 +117,15 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      - name: Upload debug screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockbit-debug-screenshots
+          path: /tmp/sb_*.png
+          retention-days: 7
+        continue-on-error: true
+
       - name: Verify scraped data
         run: |
           cd $GITHUB_WORKSPACE
