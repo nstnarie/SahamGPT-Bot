@@ -376,6 +376,146 @@ class StockbitBrokerScraper:
 
         return results
 
+    def scrape_historical(
+        self,
+        session,  # SQLAlchemy session
+        tickers: List[str],
+        start_date: str,
+        end_date: str = None,
+        skip_weekends: bool = True,
+        skip_existing: bool = True,
+    ) -> Dict[str, int]:
+        """
+        Scrape HISTORICAL broker summary for backtesting.
+
+        Iterates through every trading day from start_date to end_date
+        and fetches broker summary for each ticker on each day.
+
+        Args:
+            session: SQLAlchemy database session
+            tickers: List of stock tickers to scrape
+            start_date: "YYYY-MM-DD" start date
+            end_date: "YYYY-MM-DD" end date (default: yesterday)
+            skip_weekends: Skip Saturday/Sunday
+            skip_existing: Skip dates that already have data in DB
+
+        Returns:
+            Dict of ticker → total broker records stored
+
+        WARNING: This is slow. For 100 tickers × 250 trading days = 25,000 API calls.
+        At 8 seconds per call, that's ~56 hours.
+        Recommendation: Run overnight via GitHub Actions, or scrape in batches.
+
+        Example usage:
+            scraper = StockbitBrokerScraper()
+            scraper.login()
+            # Scrape 3 months of data for LQ45
+            scraper.scrape_historical(
+                session, LQ45_TICKERS,
+                start_date="2024-10-01",
+                end_date="2024-12-31"
+            )
+        """
+        from database.schema import BrokerSummary
+
+        if not self.logged_in:
+            if not self.login():
+                return {}
+
+        if end_date is None:
+            end_date = (date.today() - timedelta(days=1)).isoformat()
+
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        # Build list of trading days
+        trading_days = []
+        current = start
+        while current <= end:
+            if skip_weekends and current.weekday() >= 5:
+                current += timedelta(days=1)
+                continue
+            trading_days.append(current)
+            current += timedelta(days=1)
+
+        total_days = len(trading_days)
+        total_tickers = len(tickers)
+        total_requests = total_days * total_tickers
+        est_hours = (total_requests * self.request_delay) / 3600
+
+        logger.info(
+            f"Historical scrape: {total_tickers} tickers × {total_days} days "
+            f"= {total_requests} requests (~{est_hours:.1f} hours)"
+        )
+
+        results = {t: 0 for t in tickers}
+
+        for day_idx, trading_date in enumerate(trading_days):
+            date_str = trading_date.isoformat()
+            logger.info(
+                f"--- Day {day_idx+1}/{total_days}: {date_str} ---"
+            )
+
+            for ticker_idx, ticker in enumerate(tickers):
+                # Skip if data already exists for this ticker+date
+                if skip_existing:
+                    existing_count = (
+                        session.query(BrokerSummary)
+                        .filter_by(ticker=ticker, date=trading_date)
+                        .count()
+                    )
+                    if existing_count > 0:
+                        logger.debug(
+                            f"  Skipping {ticker} {date_str} — "
+                            f"{existing_count} records already exist"
+                        )
+                        continue
+
+                broker_data = self.fetch_broker_summary(ticker, date_str)
+
+                if broker_data is None or len(broker_data) == 0:
+                    continue
+
+                count = 0
+                for b in broker_data:
+                    try:
+                        bs = BrokerSummary(
+                            ticker=ticker,
+                            date=trading_date,
+                            broker_code=b["broker_code"],
+                            buy_value=b["buy_val"],
+                            sell_value=b["sell_val"],
+                            buy_volume=b["buy_vol"],
+                            sell_volume=b["sell_vol"],
+                            net_value=b["net_val"],
+                            net_volume=b["net_vol"],
+                        )
+                        session.merge(bs)
+                        count += 1
+                    except Exception as e:
+                        logger.error(
+                            f"Error storing {ticker}/{b['broker_code']}/{date_str}: {e}"
+                        )
+
+                session.commit()
+                results[ticker] = results.get(ticker, 0) + count
+
+                # Progress logging every 10 tickers
+                if (ticker_idx + 1) % 10 == 0:
+                    progress = ((day_idx * total_tickers + ticker_idx + 1)
+                                / total_requests * 100)
+                    logger.info(
+                        f"  Progress: {progress:.1f}% "
+                        f"({ticker_idx+1}/{total_tickers} tickers on {date_str})"
+                    )
+
+        total_records = sum(results.values())
+        logger.info(
+            f"Historical scrape complete: {total_records} broker records "
+            f"across {total_tickers} tickers"
+        )
+        return results
+
     def compute_real_foreign_flow(
         self, session, ticker: str, target_date: str = None
     ) -> Optional[Dict]:
