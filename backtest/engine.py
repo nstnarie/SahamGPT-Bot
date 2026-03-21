@@ -191,6 +191,11 @@ class BacktestEngine:
                     atr = sig_row.get("atr", atr)
                     ff_consecutive_sell = int(sig_row.get("ff_consecutive_sell", 0))
 
+                # Get MA10 for trend exit
+                current_ma10 = None
+                if sig_df is not None and current_date in sig_df.index:
+                    current_ma10 = sig_df.loc[current_date].get("ma_10", None)
+
                 self.portfolio_mgr.update_trailing_stop(pos, row["close"], atr)
                 pos.days_held += 1
 
@@ -198,6 +203,7 @@ class BacktestEngine:
                     pos, row["close"], row["low"], atr,
                     composite_score, regime, pos.days_held,
                     ff_consecutive_sell=ff_consecutive_sell,
+                    current_ma10=current_ma10,
                 )
 
                 if exit_reason and fraction > 0:
@@ -207,6 +213,9 @@ class BacktestEngine:
 
                     if exit_reason == "STOP_LOSS":
                         exit_price = pos.stop_price
+                    elif exit_reason == "EMERGENCY_STOP":
+                        # Emergency: use the hard cap price, not the low
+                        exit_price = pos.entry_price * (1 - self.config.exit.emergency_stop_pct)
                     else:
                         exit_price = row["close"]
 
