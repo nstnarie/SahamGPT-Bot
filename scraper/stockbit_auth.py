@@ -1,25 +1,7 @@
 """
-Stockbit Auto-Login via Playwright
-======================================
-Uses a real headless browser to log into Stockbit, bypassing reCAPTCHA v3.
-
-reCAPTCHA v3 is score-based (no puzzle). It watches browser behavior to decide
-if the user is human. Playwright with stealth plugin looks like a real browser,
-so reCAPTCHA v3 gives it a high score and lets the login through.
-
-Usage:
-    token = get_stockbit_token("your_email", "your_password")
-    # token is the Bearer JWT, valid for ~24 hours
-
-Required packages:
-    pip install playwright playwright-stealth
-    playwright install chromium
-
-In GitHub Actions, add to your workflow:
-    - name: Install Playwright
-      run: |
-        pip install playwright playwright-stealth
-        playwright install chromium --with-deps
+Stockbit Auto-Login via Playwright v3
+========================================
+With diagnostic screenshots and exhaustive token capture methods.
 """
 
 import json
@@ -37,200 +19,239 @@ def get_stockbit_token(
     headless: bool = True,
     timeout_ms: int = 30000,
 ) -> Optional[str]:
-    """
-    Log into Stockbit using a real browser and extract the JWT token.
-
-    Args:
-        username: Stockbit email (or STOCKBIT_USERNAME env var)
-        password: Stockbit password (or STOCKBIT_PASSWORD env var)
-        headless: Run browser without visible window
-        timeout_ms: Max time to wait for login (milliseconds)
-
-    Returns:
-        JWT token string (without "Bearer " prefix), or None on failure.
-    """
     from playwright.sync_api import sync_playwright
 
-    # Handle different playwright-stealth versions
-    stealth_available = False
-    stealth_sync_fn = None
+    # Try importing stealth
+    stealth_fn = None
     try:
-        # Old API (playwright-stealth2, tf-playwright-stealth)
-        from playwright_stealth import stealth_sync as _stealth_sync
-        stealth_sync_fn = _stealth_sync
-        stealth_available = True
+        from playwright_stealth import stealth_sync
+        stealth_fn = stealth_sync
     except ImportError:
-        try:
-            # New API (playwright-stealth >= 2.0)
-            from playwright_stealth import Stealth
-            stealth_available = True
-        except ImportError:
-            stealth_available = False
+        logger.warning("stealth_sync not available, continuing without stealth")
 
     username = username or os.getenv("STOCKBIT_USERNAME", "")
     password = password or os.getenv("STOCKBIT_PASSWORD", "")
 
     if not username or not password:
-        logger.error("Set STOCKBIT_USERNAME and STOCKBIT_PASSWORD env vars")
+        logger.error("Set STOCKBIT_USERNAME and STOCKBIT_PASSWORD")
         return None
 
     token = None
+    captured = {"token": None}
+
+    # Track ALL responses for debugging
+    all_responses = []
 
     try:
         with sync_playwright() as p:
-            # Launch real Chromium browser
             browser = p.chromium.launch(
                 headless=headless,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                ]
+                args=["--disable-blink-features=AutomationControlled",
+                      "--no-sandbox", "--disable-dev-shm-usage"]
             )
 
             context = browser.new_context(
                 viewport={"width": 1366, "height": 768},
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/145.0.0.0 Safari/537.36"
-                ),
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
                 locale="en-US",
             )
 
             page = context.new_page()
 
-            # Apply stealth to avoid bot detection
-            if stealth_available:
-                if stealth_sync_fn:
-                    # Old API: stealth_sync(page)
-                    stealth_sync_fn(page)
-                else:
-                    # New API: Stealth class
-                    try:
-                        stealth = Stealth()
-                        stealth.apply_stealth_sync(context)
-                    except Exception as e:
-                        logger.warning(f"Stealth apply failed: {e}. Continuing without stealth.")
-            else:
-                logger.warning("No stealth plugin available. Bot detection may trigger.")
+            if stealth_fn:
+                stealth_fn(page)
 
-            # Capture the auth token from API responses
-            captured_token = {"value": None}
-
-            def handle_response(response):
-                """Intercept API responses to capture the JWT token."""
+            # ── Intercept ALL network traffic ──
+            def on_response(response):
                 url = response.url
-                # The login response contains the token
-                if "login" in url and response.status == 200:
+                status = response.status
+                all_responses.append(f"{status} {url[:100]}")
+
+                # Capture token from ANY exodus API response
+                if "exodus.stockbit.com" in url and status == 200:
                     try:
                         body = response.json()
-                        t = body.get("data", {}).get("access_token", "")
-                        if not t:
-                            t = body.get("data", {}).get("token", "")
-                        if t:
-                            captured_token["value"] = t
-                            logger.info("Captured auth token from login response")
+                        # Try multiple possible token locations
+                        for path in [
+                            lambda b: b.get("data", {}).get("access_token"),
+                            lambda b: b.get("data", {}).get("token"),
+                            lambda b: b.get("access_token"),
+                            lambda b: b.get("token"),
+                        ]:
+                            t = path(body)
+                            if t and isinstance(t, str) and len(t) > 50:
+                                captured["token"] = t
+                                logger.info(f"TOKEN CAPTURED from response: {url[:80]}")
+                                return
                     except Exception:
                         pass
 
-            def handle_request(request):
-                """Intercept outgoing requests to capture auth header."""
+            def on_request(request):
                 auth = request.headers.get("authorization", "")
-                if auth.startswith("Bearer ey") and not captured_token["value"]:
-                    captured_token["value"] = auth.replace("Bearer ", "")
-                    logger.info("Captured auth token from request header")
+                if auth.startswith("Bearer ey") and not captured["token"]:
+                    captured["token"] = auth[7:].strip()
+                    logger.info(f"TOKEN CAPTURED from request header: {request.url[:80]}")
 
-            page.on("response", handle_response)
-            page.on("request", handle_request)
+            page.on("response", on_response)
+            page.on("request", on_request)
 
-            # Navigate to Stockbit login page
-            logger.info("Opening Stockbit login page...")
+            # ── Step 1: Go to login page ──
+            logger.info("Step 1: Opening login page...")
             page.goto("https://stockbit.com/login", wait_until="networkidle")
-            time.sleep(2)  # Let reCAPTCHA v3 initialize
+            time.sleep(3)
+            page.screenshot(path="/tmp/sb_01_login_page.png")
+            logger.info(f"  Current URL: {page.url}")
 
-            # Find and fill the email field
-            logger.info("Filling login form...")
-            email_input = page.locator('input[type="text"], input[type="email"], input[name="username"], input[placeholder*="email" i], input[placeholder*="user" i]').first
-            email_input.wait_for(timeout=timeout_ms)
-            email_input.click()
+            # ── Step 2: Fill email ──
+            logger.info("Step 2: Filling email...")
+            # Try multiple selectors
+            email_filled = False
+            for selector in [
+                'input[name="username"]',
+                'input[type="email"]',
+                'input[type="text"]',
+                'input[placeholder*="email" i]',
+                'input[placeholder*="user" i]',
+                'input[placeholder*="Email" i]',
+            ]:
+                try:
+                    el = page.locator(selector).first
+                    if el.is_visible(timeout=2000):
+                        el.click()
+                        time.sleep(0.3)
+                        el.fill(username)
+                        email_filled = True
+                        logger.info(f"  Email filled using: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if not email_filled:
+                logger.error("  Could not find email input field!")
+                page.screenshot(path="/tmp/sb_02_no_email_field.png")
+                browser.close()
+                return None
+
             time.sleep(0.5)
-            email_input.fill(username)
-            time.sleep(0.5)
 
-            # Find and fill the password field
-            password_input = page.locator('input[type="password"]').first
-            password_input.click()
-            time.sleep(0.5)
-            password_input.fill(password)
-            time.sleep(1)  # Let reCAPTCHA v3 observe "human" behavior
+            # ── Step 3: Fill password ──
+            logger.info("Step 3: Filling password...")
+            pwd_input = page.locator('input[type="password"]').first
+            pwd_input.click()
+            time.sleep(0.3)
+            pwd_input.fill(password)
+            time.sleep(1)
+            page.screenshot(path="/tmp/sb_03_form_filled.png")
 
-            # Click the login button
-            logger.info("Clicking login...")
-            login_button = page.locator('button[type="submit"], button:has-text("Login"), button:has-text("Masuk"), button:has-text("Sign In")').first
-            login_button.click()
+            # ── Step 4: Click login ──
+            logger.info("Step 4: Clicking login button...")
+            login_clicked = False
+            for selector in [
+                'button[type="submit"]',
+                'button:has-text("Login")',
+                'button:has-text("Masuk")',
+                'button:has-text("Sign In")',
+                'button:has-text("Log In")',
+            ]:
+                try:
+                    btn = page.locator(selector).first
+                    if btn.is_visible(timeout=2000):
+                        btn.click()
+                        login_clicked = True
+                        logger.info(f"  Clicked: {selector}")
+                        break
+                except Exception:
+                    continue
 
-            # Wait for navigation or token capture
-            logger.info("Waiting for login response...")
-            try:
-                page.wait_for_url("**/home**", timeout=timeout_ms)
-                logger.info("Login successful — redirected to home")
-            except Exception:
-                # Might not redirect, but token could still be captured
+            if not login_clicked:
+                logger.error("  Could not find login button!")
+                page.screenshot(path="/tmp/sb_04_no_button.png")
+                browser.close()
+                return None
+
+            # ── Step 5: Wait for response ──
+            logger.info("Step 5: Waiting for login response (35s)...")
+            # Wait longer and check periodically
+            for i in range(7):
                 time.sleep(5)
+                if captured["token"]:
+                    logger.info(f"  Token captured after {(i+1)*5}s!")
+                    break
+                logger.info(f"  ...{(i+1)*5}s elapsed, URL: {page.url[:60]}")
 
-            # If token wasn't captured from login response, try to get it
-            # from subsequent API calls by navigating to a stock page
-            if not captured_token["value"]:
-                logger.info("Token not captured from login, trying stock page...")
-                page.goto("https://stockbit.com/symbol/BBCA", wait_until="networkidle")
-                time.sleep(3)
+            page.screenshot(path="/tmp/sb_05_after_login.png")
+            logger.info(f"  URL after login: {page.url}")
 
-            # Also try to extract from cookies or localStorage
-            if not captured_token["value"]:
-                try:
-                    cookies = context.cookies()
-                    for cookie in cookies:
-                        if cookie["name"] in ("access_token", "token", "sb_token"):
-                            captured_token["value"] = cookie["value"]
-                            logger.info(f"Captured token from cookie: {cookie['name']}")
+            # ── Step 6: If no token yet, try navigating to stock page ──
+            if not captured["token"]:
+                logger.info("Step 6: Navigating to BBCA page to trigger API calls...")
+                page.goto("https://stockbit.com/symbol/BBCA/chartbit", wait_until="networkidle")
+                time.sleep(5)
+                page.screenshot(path="/tmp/sb_06_bbca_page.png")
+
+            # ── Step 7: Try cookies ──
+            if not captured["token"]:
+                logger.info("Step 7: Checking cookies...")
+                cookies = context.cookies()
+                cookie_names = [c["name"] for c in cookies]
+                logger.info(f"  Cookie names: {cookie_names}")
+                for cookie in cookies:
+                    if "token" in cookie["name"].lower() or "access" in cookie["name"].lower() or "auth" in cookie["name"].lower():
+                        logger.info(f"  Found potential token cookie: {cookie['name']} = {cookie['value'][:30]}...")
+                        if len(cookie["value"]) > 50:
+                            captured["token"] = cookie["value"]
+                            logger.info(f"  TOKEN CAPTURED from cookie: {cookie['name']}")
                             break
-                except Exception:
-                    pass
 
-            if not captured_token["value"]:
+            # ── Step 8: Try localStorage ──
+            if not captured["token"]:
+                logger.info("Step 8: Checking localStorage...")
                 try:
-                    ls_token = page.evaluate("""
-                        () => {
-                            return localStorage.getItem('access_token') 
-                                || localStorage.getItem('token')
-                                || localStorage.getItem('sb_access_token')
-                                || '';
-                        }
-                    """)
-                    if ls_token:
-                        captured_token["value"] = ls_token
-                        logger.info("Captured token from localStorage")
-                except Exception:
-                    pass
+                    ls_keys = page.evaluate("() => Object.keys(localStorage)")
+                    logger.info(f"  localStorage keys: {ls_keys}")
+                    for key in ls_keys:
+                        if "token" in key.lower() or "access" in key.lower() or "auth" in key.lower() or "jwt" in key.lower():
+                            val = page.evaluate(f"() => localStorage.getItem('{key}')")
+                            if val and len(str(val)) > 50:
+                                captured["token"] = str(val)
+                                logger.info(f"  TOKEN CAPTURED from localStorage: {key}")
+                                break
+                except Exception as e:
+                    logger.warning(f"  localStorage check failed: {e}")
 
-            token = captured_token["value"]
+            # ── Step 9: Try sessionStorage ──
+            if not captured["token"]:
+                logger.info("Step 9: Checking sessionStorage...")
+                try:
+                    ss_keys = page.evaluate("() => Object.keys(sessionStorage)")
+                    logger.info(f"  sessionStorage keys: {ss_keys}")
+                    for key in ss_keys:
+                        val = page.evaluate(f"() => sessionStorage.getItem('{key}')")
+                        if val and isinstance(val, str) and val.startswith("eyJ"):
+                            captured["token"] = val
+                            logger.info(f"  TOKEN CAPTURED from sessionStorage: {key}")
+                            break
+                except Exception as e:
+                    logger.warning(f"  sessionStorage check failed: {e}")
+
+            # ── Debug: Log all API responses we saw ──
+            if not captured["token"]:
+                logger.error("FAILED to capture token. Network responses seen:")
+                for resp in all_responses[-30:]:
+                    logger.error(f"  {resp}")
+
+            token = captured["token"]
             browser.close()
 
     except Exception as e:
-        logger.error(f"Playwright login error: {e}")
+        logger.error(f"Playwright error: {type(e).__name__}: {e}")
         return None
 
     if token:
-        logger.info(f"Token obtained successfully (length: {len(token)})")
-        # Verify it looks like a JWT
-        if token.startswith("eyJ"):
-            return token
-        else:
-            logger.warning(f"Token doesn't look like a JWT: {token[:20]}...")
-            return token
+        logger.info(f"SUCCESS — Token length: {len(token)}")
+        return token
     else:
-        logger.error("Failed to capture auth token. Login may have failed.")
+        logger.error("FAILED — No token captured from any source")
         return None
 
 
@@ -238,9 +259,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     token = get_stockbit_token()
     if token:
-        print(f"\nToken (first 50 chars): {token[:50]}...")
-        print(f"Token length: {len(token)}")
-        print("\nFull token (copy this to STOCKBIT_TOKEN if needed):")
-        print(token)
+        print(f"\nToken: {token[:50]}...")
     else:
-        print("\nFailed to get token. Check your credentials.")
+        print("\nFailed. Check logs above.")
