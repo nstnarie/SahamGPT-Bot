@@ -1,0 +1,116 @@
+name: Scrape Historical Broker Summary
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD)"
+        required: true
+        default: "2024-01-01"
+      end_date:
+        description: "End date (YYYY-MM-DD)"
+        required: true
+        default: "2024-03-31"
+      batch:
+        description: "Ticker batch (1=first 25, 2=next 25, 3=next 25, 4=rest, all=all tickers)"
+        required: true
+        default: "1"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install requests
+
+      - name: Restore database
+        uses: actions/download-artifact@v4
+        with:
+          name: idx-database
+          path: .
+        continue-on-error: true
+
+      - name: Run historical broker summary scrape
+        env:
+          STOCKBIT_USERNAME: ${{ secrets.STOCKBIT_USERNAME }}
+          STOCKBIT_PASSWORD: ${{ secrets.STOCKBIT_PASSWORD }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import sys
+          import logging
+
+          logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+          from database.schema import get_session, create_all_tables
+          from scraper.price_scraper import LQ45_TICKERS
+          from scraper.broker_scraper import StockbitBrokerScraper
+
+          # Create tables if needed
+          create_all_tables()
+          session = get_session()
+
+          # Select ticker batch (to stay within GitHub Actions time limit)
+          batch = "${{ github.event.inputs.batch }}"
+          tickers = LQ45_TICKERS
+
+          if batch == "1":
+              tickers = tickers[:25]
+              print(f"Batch 1: tickers 1-25 ({tickers[0]} to {tickers[-1]})")
+          elif batch == "2":
+              tickers = tickers[25:50]
+              print(f"Batch 2: tickers 26-50 ({tickers[0]} to {tickers[-1]})")
+          elif batch == "3":
+              tickers = tickers[50:75]
+              print(f"Batch 3: tickers 51-75 ({tickers[0]} to {tickers[-1]})")
+          elif batch == "4":
+              tickers = tickers[75:]
+              print(f"Batch 4: tickers 76+ ({tickers[0]} to {tickers[-1]})")
+          else:
+              print(f"All tickers: {len(tickers)} stocks")
+
+          start_date = "${{ github.event.inputs.start_date }}"
+          end_date = "${{ github.event.inputs.end_date }}"
+
+          print(f"Scraping broker summary: {start_date} to {end_date}")
+          print(f"Tickers: {len(tickers)}")
+
+          scraper = StockbitBrokerScraper()
+          if not scraper.login():
+              print("ERROR: Failed to login to Stockbit")
+              sys.exit(1)
+
+          results = scraper.scrape_historical(
+              session=session,
+              tickers=tickers,
+              start_date=start_date,
+              end_date=end_date,
+              skip_existing=True,
+          )
+
+          total = sum(results.values())
+          print(f"\nDone! Total broker records stored: {total}")
+          for ticker, count in sorted(results.items(), key=lambda x: -x[1])[:10]:
+              print(f"  {ticker}: {count} records")
+
+          session.close()
+          EOF
+
+      - name: Save database
+        uses: actions/upload-artifact@v4
+        with:
+          name: idx-database
+          path: idx_swing_trader.db
+          retention-days: 90
+          overwrite: true
