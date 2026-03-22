@@ -106,15 +106,17 @@ class EntryConfig:
 
 @dataclass
 class PositionSizingConfig:
-    # Reduced from 2% to 1.5% because we hold through early volatility now
     risk_per_trade: float = 0.015
     atr_period: int = 14
     atr_stop_multiple: float = 2.0
-    max_position_pct: float = 0.15
-    max_total_exposure: float = 0.80
-    max_positions: int = 8
+    max_position_pct: float = 0.12  # 12% max per stock (was 15%)
+    max_total_exposure: float = 0.90  # 90% max invested (was 80%)
     max_sector_pct: float = 0.30
     settlement_buffer: float = 0.05
+    # max_positions REMOVED — capital allocation is the real limit
+    # With 90% max exposure and 12% per stock, natural max is ~7-8 positions
+    # But if some positions are small (partial sold or smaller stocks),
+    # more positions can fit — just like real trading
 
 
 @dataclass
