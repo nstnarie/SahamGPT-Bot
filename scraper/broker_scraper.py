@@ -149,9 +149,12 @@ class StockbitBrokerScraper:
     # ──────────────────────────────────────────────────────────
 
     def _rate_limit(self):
+        import random
+        # Randomize delay between 6-12 seconds to look like human browsing
+        delay = self.request_delay + random.uniform(-2.0, 4.0)
         elapsed = time.time() - self.last_request_time
-        if elapsed < self.request_delay:
-            time.sleep(self.request_delay - elapsed)
+        if elapsed < delay:
+            time.sleep(delay - elapsed)
         self.last_request_time = time.time()
 
     def fetch_broker_summary(
