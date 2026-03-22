@@ -132,31 +132,30 @@ class PortfolioManager:
 
     def check_exit_conditions(self, position, current_close, current_low,
                                current_atr, composite_score, regime, trading_day,
-                               ff_consecutive_sell=0, current_ma10=None):
+                               ff_consecutive_sell=0, current_ma10=None,
+                               is_foreign_driven=False):
         """
-        Exit logic v5:
+        Exit logic v6:
         
         1. Emergency stop: -15% at ANY time (even during hold period)
-        2. During first 5 days: NO regular stop-loss (let breakout develop)
-        3. After 5 days: regular stop-loss active
-        4. HIGH PERFORMERS (gained > 15%): switch to trend exit — 
-           only sell when price closes below MA10 (short-term trend break)
-           This keeps you in stocks like EMTK that are running hard.
-        5. Time exit, FF exit, regime exit as before
+        2. During first 5 days: NO regular stop-loss
+        3. HIGH PERFORMERS (+15%): trend exit — close < MA10
+        4. Stop-loss: -7% or 1.5xATR, cap -10% (after day 5)
+        5. Partial profit: sell 30% at +15%
+        6. Time exit: 15 days no +3%
+        7. FF exit: 5 consecutive days net foreign sell (ONLY for foreign-driven stocks,
+           and ONLY when stock is also losing momentum — not when it's still rising)
+        8. Regime exit: BEAR → close all
         """
         profit_pct = (current_close - position.entry_price) / position.entry_price
 
         # 1. EMERGENCY STOP — always active, even during hold period
-        # If a stock drops -15%, something is seriously wrong — get out
         emergency_loss = (current_low - position.entry_price) / position.entry_price
         if emergency_loss <= -self.exits.emergency_stop_pct:
             return "EMERGENCY_STOP", 1.0
 
-        # 2. MINIMUM HOLD PERIOD — no regular stop during first N days
-        # Data shows: days 1-5 = 7% win rate, days 6+ = 49% win rate
+        # 2. MINIMUM HOLD PERIOD
         if position.days_held <= self.exits.min_hold_days:
-            # Only emergency stop can fire during this period
-            # But still check for partial profit (good news is always welcome)
             if (not position.partial_sold
                     and self.exits.partial_sell_fraction > 0
                     and profit_pct >= self.exits.partial_target_pct):
@@ -164,21 +163,17 @@ class PortfolioManager:
                 return "PARTIAL_PROFIT", self.exits.partial_sell_fraction
             return "", 0.0
 
-        # === After min_hold_days, full exit logic applies ===
+        # === After min_hold_days ===
 
         # 3. HIGH PERFORMER TREND EXIT
-        # If stock gained > 15%, switch to trend-following mode:
-        # Don't use stop-loss — only exit when uptrend breaks (close < MA10)
         if position.in_trend_mode and current_ma10 is not None:
             if current_close < current_ma10:
                 return "TREND_EXIT", 1.0
-            # In trend mode, don't check regular stop — let it ride
-            # But still check regime exit
             if regime == "BEAR":
                 return "REGIME_EXIT", self.exits.bear_regime_close_fraction
             return "", 0.0
 
-        # 4. REGULAR STOP-LOSS (only after hold period, non-trend-mode)
+        # 4. REGULAR STOP-LOSS
         if current_low <= position.stop_price:
             return "STOP_LOSS", 1.0
 
@@ -194,9 +189,18 @@ class PortfolioManager:
                 and profit_pct < self.exits.time_exit_min_gain):
             return "TIME_EXIT", 1.0
 
-        # 7. Foreign flow exit
-        if ff_consecutive_sell >= 5:
-            return "FF_EXIT", 1.0
+        # 7. Foreign flow exit — ONLY for foreign-driven stocks
+        # AND only when price is also below entry (losing) or below MA10 (weakening)
+        # DSSA fix: stock went +78% after FF_EXIT because it's domestic-driven.
+        # Even for foreign stocks, if price is still rising, foreign selling
+        # might just be profit-taking, not distribution.
+        if is_foreign_driven and ff_consecutive_sell >= 5:
+            price_weakening = (
+                profit_pct < 0  # stock is in the red
+                or (current_ma10 is not None and current_close < current_ma10)  # below MA10
+            )
+            if price_weakening:
+                return "FF_EXIT", 1.0
 
         # 8. Regime exit
         if regime == "BEAR":
