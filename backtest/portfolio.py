@@ -184,10 +184,19 @@ class PortfolioManager:
             position.partial_sold = True
             return "PARTIAL_PROFIT", self.exits.partial_sell_fraction
 
-        # 6. Time exit
+        # 6. Time exit — but NOT if stock is still trending up
+        # PGAS fix: entered 1860, exited 1895 at day 15 (+1.9% < 3% threshold).
+        # Price kept climbing to 2000. The stock wasn't dead — it was slow-building.
+        # New rule: only time-exit if price is ALSO below MA10 (trend broken).
+        # If price is above MA10, the stock is still in an uptrend — give it more time.
         if (position.days_held >= self.exits.time_exit_max_days
                 and profit_pct < self.exits.time_exit_min_gain):
-            return "TIME_EXIT", 1.0
+            if current_ma10 is not None and current_close > current_ma10:
+                # Stock is above MA10 — still trending up, don't exit yet
+                pass
+            else:
+                # Stock is below MA10 or no MA data — trend broken, exit
+                return "TIME_EXIT", 1.0
 
         # 7. Foreign flow exit — ONLY for foreign-driven stocks
         # AND only when price is also below entry (losing) or below MA10 (weakening)
