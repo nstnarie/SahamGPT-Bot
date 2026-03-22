@@ -191,10 +191,12 @@ class BacktestEngine:
                     atr = sig_row.get("atr", atr)
                     ff_consecutive_sell = int(sig_row.get("ff_consecutive_sell", 0))
 
-                # Get MA10 for trend exit
+                # Get MA10 and is_foreign_driven for exit logic
                 current_ma10 = None
+                is_foreign_driven = False
                 if sig_df is not None and current_date in sig_df.index:
                     current_ma10 = sig_df.loc[current_date].get("ma_10", None)
+                    is_foreign_driven = bool(sig_df.loc[current_date].get("is_foreign_driven", False))
 
                 self.portfolio_mgr.update_trailing_stop(pos, row["close"], atr)
                 pos.days_held += 1
@@ -204,6 +206,7 @@ class BacktestEngine:
                     composite_score, regime, pos.days_held,
                     ff_consecutive_sell=ff_consecutive_sell,
                     current_ma10=current_ma10,
+                    is_foreign_driven=is_foreign_driven,
                 )
 
                 if exit_reason and fraction > 0:
