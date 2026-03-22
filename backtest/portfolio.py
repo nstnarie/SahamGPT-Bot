@@ -73,31 +73,56 @@ class PortfolioManager:
 
     def calculate_position_size(self, portfolio, entry_price, atr,
                                  sector="", regime_exposure_mult=1.0):
+        """
+        Calculate position size based on CAPITAL ALLOCATION, not slot counts.
+        
+        Gates (in order):
+          1. Risk budget: 1.5% of equity per trade
+          2. Max single position: 12% of equity
+          3. Regime adjustment: half size in sideways
+          4. Total exposure cap: 90% of equity max invested
+          5. Sector cap: 30% of equity per sector
+          6. Cash available: can't spend more than you have
+        
+        No hard position count limit. If you have capital, you can enter.
+        This is how real trading works.
+        """
         equity = portfolio.total_equity
         if equity <= 0 or entry_price <= 0 or atr <= 0:
             return 0
 
+        # 1. Risk-based sizing
         risk_amount = equity * self.sizing.risk_per_trade
         stop_distance = max(atr * self.sizing.atr_stop_multiple,
                             entry_price * self.exits.stop_loss_pct)
         raw_shares = risk_amount / stop_distance
+
+        # 2. Max single position cap
         raw_shares = min(raw_shares, (equity * self.sizing.max_position_pct) / entry_price)
+
+        # 3. Regime adjustment
         raw_shares *= regime_exposure_mult
 
+        # 4. Total exposure cap — how much more can we invest?
         current_invested = equity - portfolio.cash
+        current_exposure_pct = current_invested / equity if equity > 0 else 0
         max_add = (equity * self.sizing.max_total_exposure) - current_invested - (equity * self.sizing.settlement_buffer)
-        if max_add <= 0: return 0
+        if max_add <= 0:
+            return 0
         raw_shares = min(raw_shares, max_add / entry_price)
 
-        if portfolio.num_positions >= self.sizing.max_positions: return 0
-
+        # 5. Sector cap
         se = portfolio.get_sector_exposure()
         remaining = self.sizing.max_sector_pct - se.get(sector or "Unknown", 0.0)
-        if remaining <= 0: return 0
+        if remaining <= 0:
+            return 0
         raw_shares = min(raw_shares, (remaining * equity) / entry_price)
+
+        # 6. Cash available
         raw_shares = min(raw_shares, portfolio.cash / (entry_price * 1.0015))
 
-        if raw_shares != raw_shares or raw_shares <= 0: return 0
+        if raw_shares != raw_shares or raw_shares <= 0:
+            return 0
         return round_to_lot(int(raw_shares))
 
     def calculate_initial_stop(self, entry_price, atr):
