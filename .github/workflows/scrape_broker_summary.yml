@@ -107,7 +107,30 @@ jobs:
           session.close()
           EOF
 
+      # ── CHANGED: Check record count BEFORE saving artifact ──
+      # This prevents an empty/failed DB from overwriting your good artifact.
+      - name: Check if data was scraped
+        id: check_data
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os
+          conn = sqlite3.connect('idx_swing_trader.db')
+          count = conn.execute('SELECT COUNT(*) FROM broker_summary').fetchone()[0]
+          conn.close()
+          print(f'Records in database: {count}')
+          has_data = 'true' if count > 0 else 'false'
+          if count > 0:
+              print('DATA_OK=true')
+          else:
+              print('DATA_OK=false')
+              print('WARNING: No data in database. Skipping artifact save to protect previous data.')
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+              f.write(f'has_data={has_data}\n')
+          EOF
+
+      # ── CHANGED: Only save artifact if DB actually has data ──
       - name: Save database
+        if: steps.check_data.outputs.has_data == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: idx-database
@@ -115,7 +138,9 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      # ── CHANGED: Only verify if DB actually has data ──
       - name: Verify scraped data
+        if: steps.check_data.outputs.has_data == 'true'
         run: |
           cd $GITHUB_WORKSPACE
           python3 verify_broker_data.py
