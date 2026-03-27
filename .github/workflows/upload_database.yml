@@ -1,0 +1,71 @@
+name: Upload Merged Database
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Merge database parts
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os, glob
+
+          merged = sqlite3.connect("idx_swing_trader.db")
+          merged.execute("""
+              CREATE TABLE IF NOT EXISTS broker_summary (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ticker TEXT NOT NULL, date TEXT NOT NULL,
+                  broker_code TEXT NOT NULL, broker_type TEXT DEFAULT '',
+                  buy_value REAL DEFAULT 0, sell_value REAL DEFAULT 0,
+                  buy_volume REAL DEFAULT 0, sell_volume REAL DEFAULT 0,
+                  net_value REAL DEFAULT 0, net_volume REAL DEFAULT 0,
+                  UNIQUE(ticker, date, broker_code)
+              )
+          """)
+
+          for table_sql in [
+              "CREATE TABLE IF NOT EXISTS stocks (ticker TEXT PRIMARY KEY, name TEXT, sector TEXT, industry TEXT, market_cap REAL, shares_outstanding REAL, free_float_pct REAL, board TEXT, last_updated TEXT)",
+              "CREATE TABLE IF NOT EXISTS daily_prices (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, value REAL, UNIQUE(ticker, date))",
+              "CREATE TABLE IF NOT EXISTS foreign_flow (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, date TEXT, foreign_buy_value REAL, foreign_sell_value REAL, net_foreign_value REAL, foreign_buy_volume REAL, foreign_sell_volume REAL, net_foreign_volume REAL, UNIQUE(ticker, date))",
+              "CREATE TABLE IF NOT EXISTS corporate_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, date TEXT, action_type TEXT, description TEXT, ratio_or_amount REAL, cum_date TEXT, ex_date TEXT)",
+              "CREATE TABLE IF NOT EXISTS index_daily (id INTEGER PRIMARY KEY AUTOINCREMENT, index_code TEXT DEFAULT 'IHSG', date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, UNIQUE(index_code, date))",
+              "CREATE TABLE IF NOT EXISTS signal_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, date TEXT, signal TEXT, composite_score REAL, regime TEXT)",
+          ]:
+              merged.execute(table_sql)
+
+          total = 0
+          for part in sorted(glob.glob("db_parts/*.db")):
+              print(f"Merging {part}...")
+              src = sqlite3.connect(part)
+              try:
+                  rows = src.execute("SELECT ticker, date, broker_code, broker_type, buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume FROM broker_summary").fetchall()
+                  merged.executemany("INSERT OR IGNORE INTO broker_summary (ticker, date, broker_code, broker_type, buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume) VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+                  merged.commit()
+                  total += len(rows)
+                  print(f"  {len(rows):,} rows")
+              except Exception as e:
+                  print(f"  Error: {e}")
+              src.close()
+
+          count = merged.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          info = merged.execute("SELECT MIN(date), MAX(date), COUNT(DISTINCT date), COUNT(DISTINCT ticker) FROM broker_summary").fetchone()
+          print(f"\nMerged: {count:,} records | {info[0]} to {info[1]} | {info[2]} days | {info[3]} tickers")
+          merged.close()
+          EOF
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: idx-database
+          path: idx_swing_trader.db
+          retention-days: 90
+          overwrite: true
