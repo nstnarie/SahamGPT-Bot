@@ -1,20 +1,20 @@
 """
 DEVELOPER_CONTEXT.py — Session Continuity Document
 =====================================================
-Last updated: March 21, 2026
+Last updated: March 28, 2026
 
 This file provides full context for any AI assistant or developer
 continuing work on this project. Read this first before making changes.
 
-Repository: nstnarle/SahamGPT (private GitHub)
-Owner: Arie Nasution
+Repository: nstnarie/SahamGPT-Bot (public GitHub)
+Owner: Arie
 """
 
 # ══════════════════════════════════════════════════════════════
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — Broker summary integration in progress"
+STATUS = "ACTIVE — Broker summary data backfill in progress (batch scraping)"
 
 CURRENT_VERSION = "v6"
 
@@ -26,22 +26,71 @@ LATEST_BACKTEST_RESULTS = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# WHAT'S IN PROGRESS RIGHT NOW
+# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-03-28)
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
-1. STOCKBIT BROKER SUMMARY SCRAPER
-   - Files: scraper/broker_scraper.py, scraper/stockbit_auth.py
-   - API: exodus.stockbit.com/marketdetectors/{TICKER}?from=...&to=...
-   - Auth: Playwright headless browser (reCAPTCHA v3 bypass via stealth)
-   - Status: Code built, needs first successful test run
-   - Next: Run workflow, verify data, then backfill 2024-2025
+1. BROKER SUMMARY DATA BACKFILL
+   - Historical scrape workflows run in 4 batches (25 tickers each)
+   - Q1 2025 (Jan-Mar): VERIFIED COMPLETE ✅
+     * 237,302 records, 58 trading days, 105-107 tickers/day, 94 broker codes
+     * All 3 broker types populated (Asing/Lokal/Pemerintah)
+     * 6 apparent "missing" days confirmed as IDX public holidays
+   - Apr 1 - May 15 2025: PARTIALLY COMPLETE ⚠️
+     * Batch 4 previously failed with SyntaxError in scrape_broker_summary.yml
+     * Root cause: python3 -c "..." with nested escaped quotes caused unterminated string literal
+     * Fix applied: switched to heredoc python3 << 'EOF' style (same as other steps)
+     * Additional issue: ALL 24 scraped days show only 71 tickers (should be ~105)
+       → This means the scraper cut off mid-run at tickers[75:] for every date
+     * 5 trading days completely missing: Apr 1, 2, 3, 4, 7
+     * Re-run currently IN PROGRESS (batch=4, 2025-04-01 to 2025-05-15)
+   - Remaining periods to scrape after current run completes:
+     * 2025-05-16 to 2025-06-30 (verify if already complete)
+     * 2024 full year (not yet started)
 
-2. BROKER DATA → SIGNAL INTEGRATION
-   - Once broker data is scraped, integrate into signal_combiner.py
-   - Replace synthetic foreign flow with real broker-level data
-   - Use Stockbit's "type" field: Asing = foreign, Pemerintah = govt
-   - Expected: significant accuracy improvement for foreign-driven stocks
+2. WORKFLOW PROTECTION FIX (COMPLETED ✅)
+   - Old workflow had NO guard: always saved artifact even if scrape failed/empty
+   - New workflow adds "Check if data was scraped" step BEFORE saving artifact
+   - Save database + Verify steps now gated on: if: steps.check_data.outputs.has_data == 'true'
+   - File: .github/workflows/scrape_broker_summary.yml — committed to main
+"""
+
+# ══════════════════════════════════════════════════════════════
+# DATABASE STATE (verified 2026-03-28)
+# ══════════════════════════════════════════════════════════════
+
+DATABASE_STATE = """
+File: idx_swing_trader.db (SQLite, ~34MB as of 2026-03-27)
+Total records: 401,185 (all tables combined)
+Broker summary date range: 2025-01-02 → 2025-06-30
+
+Tables: broker_summary, stocks, daily_prices, foreign_flow,
+        corporate_actions, index_daily, signal_log
+
+broker_summary schema:
+  id          INTEGER PK
+  ticker      TEXT
+  date        TEXT  (YYYY-MM-DD)
+  broker_code TEXT
+  broker_type TEXT  ('Asing' | 'Lokal' | 'Pemerintah')
+  buy_value   REAL
+  sell_value  REAL
+  buy_volume  REAL
+  sell_volume REAL
+  net_value   REAL
+  net_volume  REAL
+
+Q1 2025 data quality (verified):
+  - 58/58 trading days present ✅
+  - 105-107 tickers per day ✅
+  - 94 unique broker codes ✅
+  - Broker type distribution: Asing 82,982 | Lokal 132,609 | Pemerintah 21,711 ✅
+  - Net foreign flow Q1: Rp -20.3T (net sell) — consistent with IHSG weakness
+
+Apr 1 - May 15 2025 data quality (NEEDS RE-VERIFICATION after current run):
+  - 24 days present but ALL at 71 tickers (should be ~105) ⚠️
+  - 5 trading days completely missing (Apr 1-4, Apr 7)
+  - Expected to be fixed by current in-progress workflow run
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -90,6 +139,7 @@ VERSION_HISTORY = {
         "new_features": [
             "FF TREND: 5-day rolling sum must be positive + breakout day not net sell (ADRO fix)",
             "CANDLE FILTER: upper shadow >40% or close in bottom 1/3 → rejected (MYOR fix)",
+            "Real Stockbit broker flow scraping via Playwright (replaces synthetic estimates)",
         ],
         "result": "2025: +60M PROFITABLE. 2024: -37M near breakeven.",
         "star": "TREND_EXIT: 12 trades, 11 wins, avg +26.5%, Rp +240M total",
@@ -143,6 +193,15 @@ KEY_LEARNINGS = """
 7. FOREIGN FLOW TREND, NOT JUST COUNT
    ADRO May 19 2025 — 3 of 5 prior days positive FF, but breakout day
    was net foreign sell. The trend was turning. New logic catches this.
+
+8. WORKFLOW ROBUSTNESS MATTERS
+   Discovered Mar 28 2026: old scrape workflow had no data guard — would
+   overwrite good artifact with empty DB on failed runs. Always gate
+   artifact uploads on record count check.
+
+9. USE HEREDOC FOR MULTI-LINE PYTHON IN YAML
+   python3 -c "..." with nested quotes causes SyntaxError.
+   Always use python3 << 'EOF' ... EOF pattern in GitHub Actions workflows.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -163,6 +222,10 @@ WEAK_SPOTS = """
 3. BROKER DATA NOT YET INTEGRATED INTO BACKTEST
    Current backtests use Yahoo Finance foreign flow estimates.
    Once Stockbit broker data is backfilled, signal quality should improve.
+
+4. APR-MAY 2025 DATA INCOMPLETE (being fixed)
+   71 tickers per day instead of ~105 — batch 4 scraper cut off mid-run.
+   Re-scrape in progress as of 2026-03-28.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -170,16 +233,35 @@ WEAK_SPOTS = """
 # ══════════════════════════════════════════════════════════════
 
 NEXT_STEPS = """
-1. ✅ Test Stockbit Playwright auto-login (verify reCAPTCHA bypass works)
-2. ✅ Small historical scrape test (1 week, 25 tickers)
-3. ⬜ Verify scraped data quality (run verify_broker_data.py)
-4. ⬜ Backfill full 2024-2025 broker data (batch workflow)
-5. ⬜ Integrate real broker data into signal_combiner.py
-6. ⬜ Re-run backtests with real broker data
-7. ⬜ Fix 6-10 day weak spot using broker accumulation data
-8. ⬜ Update daily_signals.yml to include broker scraping
-9. ⬜ Paper trade for 1 month
-10. ⬜ Go live
+IMMEDIATE (in progress):
+  ⏳ Re-run batch 4 scrape: 2025-04-01 to 2025-05-15 (currently running)
+
+AFTER CURRENT RUN COMPLETES:
+  1. Download artifact and verify Apr-May data:
+     - Check all days now have ~105 tickers (not 71)
+     - Confirm Apr 1-7 missing days are filled
+     - Run verify_broker_data.py or manual SQL check
+
+  2. Audit remaining periods for completeness:
+     - 2025-05-16 to 2025-06-30 (check if already ~105 tickers/day)
+     - If also showing 71 tickers → re-run those batches too
+
+  3. Backfill 2024 full year broker data:
+     - Run batches 1-4 for 2024-01-01 to 2024-12-31
+     - 4 batches × ~4 date ranges = ~16 workflow runs
+
+  4. Integrate real broker data into signal_combiner.py:
+     - Replace synthetic foreign flow with real Asing net_value from DB
+     - Use broker_summary table directly in signal generation
+
+  5. Re-run backtests with real broker data
+     - Expected improvement especially in 2024 results
+
+  6. Fix 6-10 day weak spot using broker accumulation signal
+
+  7. Update daily_signals.yml to include live broker scraping each day
+
+  8. Paper trade for 1 month → Go live
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -195,28 +277,39 @@ Params:
   market_board=MARKET_BOARD_REGULER
   investor_type=INVESTOR_TYPE_ALL
   limit=25 (or 50 for all brokers)
-
 Auth: Bearer JWT token (from Playwright login)
 Login: POST https://exodus.stockbit.com/login/v6/username
   Requires reCAPTCHA v3 token → must use browser automation
-
 Response structure:
-  data.broker_summary.brokers_buy[] — net buyers
+  data.broker_summary.brokers_buy[]  — net buyers
     .netbs_broker_code — broker code (e.g. "BK", "AK")
-    .type — "Asing" / "Lokal" / "Pemerintah"
-    .blot — net lots (positive)
-    .bval — net value (positive)
-    .bvalv — total value (buy+sell combined)
-    .freq — number of transactions
-
+    .type   — "Asing" / "Lokal" / "Pemerintah"
+    .blot   — net lots (positive)
+    .bval   — net value (positive)
+    .bvalv  — total value (buy+sell combined)
+    .freq   — number of transactions
   data.broker_summary.brokers_sell[] — net sellers
-    .slot — net lots (negative)
-    .sval — net value (negative)
-    .svalv — total value
-
+    .slot   — net lots (negative)
+    .sval   — net value (negative)
+    .svalv  — total value
   data.bandar_detector — accumulation/distribution summary
     .broker_accdist — "Acc" / "Dist" / "Neutral"
     .top3/top5/top10 — aggregated signals
-
 Rate limit: ~40 requests per 5 minutes
+"""
+
+# ══════════════════════════════════════════════════════════════
+# WORKFLOW REFERENCE
+# ══════════════════════════════════════════════════════════════
+
+WORKFLOWS = """
+daily_signals.yml         — Weekday 16:35 WIB, runs full pipeline, sends to Telegram
+initial_scrape.yml        — One-time historical price download
+run_backtest.yml          — On-demand backtesting
+monthly_optimise.yml      — Monthly parameter tuning
+scrape_broker_summary.yml — Manual trigger: batch broker data scraping
+  Inputs: start_date, end_date, batch (1/2/3/4/all)
+  Batches: 1=tickers[0:25], 2=tickers[25:50], 3=tickers[50:75], 4=tickers[75:]
+  Guard: only saves artifact if record count > 0 (prevents empty DB overwrite)
+  Pattern: always use python3 << 'EOF' heredoc, never python3 -c "..."
 """
