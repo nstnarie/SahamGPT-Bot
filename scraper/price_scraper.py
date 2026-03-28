@@ -198,10 +198,9 @@ LQ45_TICKERS = [
     "HOKI", "HRTA", "IGAR", "INDY", "INTA", "IPOL", "ISAT",
     "JARR", "JSMR", "KBLI", "KIJA", "LINK",
     "LPPF", "MDIA", "MDLN", "MKPI", "MNCN", "MTEL",
-    "MYOR", "NCKL", "PNBN", "PTBA", "PTPP", "PWON", "RALS",
+    "MYOR", "NCKL", "NIKL", "PNBN", "PTBA", "PTPP", "PTRO", "PWON", "RALS",
     "SCMA", "SIDO", "SILO", "SMRA", "SRTG", "SSMS",
     "TKIM", "TOTL", "TSPC", "WIKA", "WSBP", "WTON",
-    "PTRO", "NIKL",
 ]
 
 
