@@ -473,6 +473,7 @@ class StockbitBrokerScraper:
                 data = self.fetch_broker_summary(ticker, date_str, date_str)
 
                 if data is None or len(data.get("brokers", [])) == 0:
+                    logger.warning(f"  {ticker} {date_str}: no brokers returned (data={data})")
                     continue
 
                 count = 0
