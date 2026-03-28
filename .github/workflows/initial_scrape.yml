@@ -29,6 +29,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Restore existing database
+        uses: actions/download-artifact@v4
+        with:
+          name: idx-database
+          path: .
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Scrape historical data
         run: |
           python main_backtest.py \
@@ -37,7 +46,31 @@ jobs:
             --end ${{ github.event.inputs.end_date }} \
             --output reports
 
+      - name: Check database has data
+        id: check_data
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os
+          try:
+              conn = sqlite3.connect("idx_swing_trader.db")
+              count = conn.execute("SELECT COUNT(*) FROM daily_prices").fetchone()[0]
+              conn.close()
+              print(f"daily_prices rows: {count}")
+              if count > 0:
+                  with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                      f.write("has_data=true\n")
+              else:
+                  print("WARNING: No price data found")
+                  with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                      f.write("has_data=false\n")
+          except Exception as e:
+              print(f"DB check error: {e}")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("has_data=false\n")
+          EOF
+
       - name: Save database
+        if: steps.check_data.outputs.has_data == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: idx-database
