@@ -1,0 +1,104 @@
+name: Bootstrap Database Artifact
+
+# Run this ONE TIME to rebuild the idx-database artifact from the two split DB files.
+# After this runs successfully, delete idx_broker_part_a.db and idx_broker_part_b.db from repo.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Merge split DB files into single artifact
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os, shutil
+
+          PART_A = "idx_broker_part_a.db"
+          PART_B = "idx_broker_part_b.db"
+          OUTPUT = "idx_swing_trader.db"
+
+          if not os.path.exists(PART_A):
+              print(f"ERROR: {PART_A} not found in repo")
+              exit(1)
+          if not os.path.exists(PART_B):
+              print(f"ERROR: {PART_B} not found in repo")
+              exit(1)
+
+          # Use Part A as the base
+          shutil.copy(PART_A, OUTPUT)
+          print(f"Copied {PART_A} as base: {os.path.getsize(OUTPUT)/1024/1024:.1f} MB")
+
+          # Merge Part B into it
+          conn = sqlite3.connect(OUTPUT)
+          conn.execute(f"ATTACH DATABASE '{PART_B}' AS part_b")
+          cur = conn.execute("""
+              INSERT OR IGNORE INTO broker_summary
+                  (ticker, date, broker_code, broker_type,
+                   buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume)
+              SELECT ticker, date, broker_code, broker_type,
+                     buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume
+              FROM part_b.broker_summary
+          """)
+          inserted = cur.rowcount
+          conn.commit()
+          conn.execute("DETACH DATABASE part_b")
+
+          # Verify
+          total = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          min_d, max_d = conn.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
+          days = conn.execute("SELECT COUNT(DISTINCT date) FROM broker_summary").fetchone()[0]
+          tickers = conn.execute("SELECT COUNT(DISTINCT ticker) FROM broker_summary").fetchone()[0]
+          conn.close()
+
+          print(f"Inserted from Part B: {inserted:,} records")
+          print(f"Final DB: {total:,} records | {min_d} → {max_d} | {days} days | {tickers} tickers")
+          print(f"File size: {os.path.getsize(OUTPUT)/1024/1024:.1f} MB")
+
+          if total < 400000:
+              print(f"WARNING: Expected ~401,185 records, got {total:,}. Check split files.")
+              exit(1)
+
+          print("Merge successful!")
+          EOF
+
+      - name: Verify record count before saving
+        id: check_data
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os
+          conn = sqlite3.connect('idx_swing_trader.db')
+          count = conn.execute('SELECT COUNT(*) FROM broker_summary').fetchone()[0]
+          conn.close()
+          has_data = 'true' if count > 0 else 'false'
+          print(f'Records in database: {count}')
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+              f.write(f'has_data={has_data}\n')
+          EOF
+
+      - name: Save as idx-database artifact
+        if: steps.check_data.outputs.has_data == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: idx-database
+          path: idx_swing_trader.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Confirm
+        run: |
+          echo "Bootstrap complete. The idx-database artifact is now ready."
+          echo "You can now safely run scrape_broker_summary.yml batches on top of this baseline."
+          echo "Remember to delete idx_broker_part_a.db and idx_broker_part_b.db from the repo after this."
