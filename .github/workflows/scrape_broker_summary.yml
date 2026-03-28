@@ -35,11 +35,52 @@ jobs:
           pip install requests
 
       - name: Restore database
-        uses: actions/download-artifact@v4
-        with:
-          name: idx-database
-          path: .
-        continue-on-error: true
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os, shutil, subprocess
+
+          OUTPUT = "idx_swing_trader.db"
+          PART_A = "idx_broker_part_a.db"
+          PART_B = "idx_broker_part_b.db"
+
+          # Try to download artifact first
+          result = subprocess.run([
+              "gh", "run", "download-artifact", "--name", "idx-database", "--dir", "."
+          ], capture_output=True)
+
+          if os.path.exists(OUTPUT):
+              count = sqlite3.connect(OUTPUT).execute(
+                  "SELECT COUNT(*) FROM broker_summary"
+              ).fetchone()[0]
+              if count > 400000:
+                  print(f"✅ Artifact restored: {count:,} records")
+                  exit(0)
+              print(f"⚠️ Artifact only has {count:,} records — rebuilding from split files")
+
+          # Fallback: rebuild from split files in repo
+          if not os.path.exists(PART_A) or not os.path.exists(PART_B):
+              print("❌ FATAL: No artifact and no split files found. Cannot proceed.")
+              exit(1)
+
+          print("Rebuilding DB from split files...")
+          shutil.copy(PART_A, OUTPUT)
+          conn = sqlite3.connect(OUTPUT)
+          conn.execute(f"ATTACH DATABASE '{PART_B}' AS part_b")
+          conn.execute("""
+              INSERT OR IGNORE INTO broker_summary
+                  (ticker, date, broker_code, broker_type,
+                   buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume)
+              SELECT ticker, date, broker_code, broker_type,
+                     buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume
+              FROM part_b.broker_summary
+          """)
+          conn.commit()
+          conn.execute("DETACH DATABASE part_b")
+          count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          conn.close()
+          print(f"✅ Rebuilt from split files: {count:,} records")
+          EOF
+        
 
       - name: Run historical broker summary scrape
         env:
