@@ -191,16 +191,17 @@ LQ45_TICKERS = [
     "TINS", "TLKM", "TOWR", "TPIA", "UNTR", "UNVR",
 
     # ── IDX SMC Liquid (Mid Cap — 2nd Tier) ──
-    "AALI", "ACES", "AGII", "AKPI", "ALTO", "ARNA", "BALI",
-    "BBKP", "BBSS", "BCIP", "BFIN", "BIRD", "BJTM", "BSDE",
-    "BTPS", "BUKA", "CMRY", "CTRA", "DMAS", "DSNG", "DSSA",
+    "AALI", "AGII", "AKPI", "ALTO", "ARNA", "BALI",
+    "BBKP", "BBSS", "BCIP", "BIRD", "BJTM", "BSDE",
+    "BTPS", "CMRY", "DMAS", "DSNG", "DSSA",
     "ELSA", "EMTK", "ERAA", "FILM", "GJTL", "HEXA", "HMSP",
     "HOKI", "HRTA", "IGAR", "INDY", "INTA", "IPOL", "ISAT",
-    "ITMG", "JARR", "JSMR", "KBLI", "KIJA", "KLBF", "LINK",
-    "LPPF", "MAPI", "MDIA", "MDLN", "MKPI", "MNCN", "MTEL",
+    "JARR", "JSMR", "KBLI", "KIJA", "LINK",
+    "LPPF", "MDIA", "MDLN", "MKPI", "MNCN", "MTEL",
     "MYOR", "NCKL", "PNBN", "PTBA", "PTPP", "PWON", "RALS",
-    "SCMA", "SIDO", "SILO", "SMRA", "SRTG", "SSMS", "TBIG",
+    "SCMA", "SIDO", "SILO", "SMRA", "SRTG", "SSMS",
     "TKIM", "TOTL", "TSPC", "WIKA", "WSBP", "WTON",
+    "PTRO", "NIKL",
 ]
 
 
