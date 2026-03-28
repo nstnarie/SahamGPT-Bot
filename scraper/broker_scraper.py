@@ -489,7 +489,7 @@ class StockbitBrokerScraper:
                             net_value=b["net_val"],
                             net_volume=b["net_lot"],
                         )
-                        session.merge(bs)
+                        session.add(bs)
                         count += 1
                     except Exception as e:
                         logger.error(f"Store error {ticker}/{b['code']}/{date_str}: {e}")
