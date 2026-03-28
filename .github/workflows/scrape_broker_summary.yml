@@ -34,7 +34,10 @@ jobs:
           pip install -r requirements.txt
           pip install requests
 
+      # ── FIXED: Added GH_TOKEN so gh CLI can download artifact from previous run ──
       - name: Restore database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 << 'EOF'
           import sqlite3, os, shutil, subprocess
@@ -43,7 +46,7 @@ jobs:
           PART_A = "idx_broker_part_a.db"
           PART_B = "idx_broker_part_b.db"
 
-          # Try to download artifact first
+          # Try to download latest artifact first
           result = subprocess.run([
               "gh", "run", "download-artifact", "--name", "idx-database", "--dir", "."
           ], capture_output=True)
@@ -57,7 +60,7 @@ jobs:
                   exit(0)
               print(f"⚠️ Artifact only has {count:,} records — rebuilding from split files")
 
-          # Fallback: rebuild from split files in repo
+          # Fallback: rebuild from split files committed in repo
           if not os.path.exists(PART_A) or not os.path.exists(PART_B):
               print("❌ FATAL: No artifact and no split files found. Cannot proceed.")
               exit(1)
@@ -80,7 +83,6 @@ jobs:
           conn.close()
           print(f"✅ Rebuilt from split files: {count:,} records")
           EOF
-        
 
       - name: Run historical broker summary scrape
         env:
