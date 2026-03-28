@@ -1,0 +1,102 @@
+name: Export DB Summary
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD)"
+        required: true
+        default: "2025-01-02"
+      end_date:
+        description: "End date (YYYY-MM-DD)"
+        required: true
+        default: "2025-05-15"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore database
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os, shutil, subprocess
+          OUTPUT = "idx_swing_trader.db"
+          PART_A = "idx_broker_part_a.db"
+          PART_B = "idx_broker_part_b.db"
+          result = subprocess.run([
+              "gh", "run", "download-artifact", "--name", "idx-database", "--dir", "."
+          ], capture_output=True)
+          if os.path.exists(OUTPUT):
+              count = sqlite3.connect(OUTPUT).execute(
+                  "SELECT COUNT(*) FROM broker_summary"
+              ).fetchone()[0]
+              if count > 400000:
+                  print(f"✅ Artifact restored: {count:,} records")
+                  exit(0)
+          shutil.copy(PART_A, OUTPUT)
+          conn = sqlite3.connect(OUTPUT)
+          conn.execute(f"ATTACH DATABASE '{PART_B}' AS part_b")
+          conn.execute("""
+              INSERT OR IGNORE INTO broker_summary
+                  (ticker, date, broker_code, broker_type,
+                   buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume)
+              SELECT ticker, date, broker_code, broker_type,
+                     buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume
+              FROM part_b.broker_summary
+          """)
+          conn.commit()
+          conn.execute("DETACH DATABASE part_b")
+          count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          conn.close()
+          print(f"✅ Rebuilt from split files: {count:,} records")
+          EOF
+
+      - name: Export summary CSV
+        run: |
+          python3 << 'EOF'
+          import sqlite3, csv
+
+          start = "${{ github.event.inputs.start_date }}"
+          end   = "${{ github.event.inputs.end_date }}"
+
+          conn = sqlite3.connect('idx_swing_trader.db')
+
+          # Overall stats
+          total = conn.execute('SELECT COUNT(*) FROM broker_summary').fetchone()[0]
+          min_d, max_d = conn.execute('SELECT MIN(date), MAX(date) FROM broker_summary').fetchone()
+          print(f"Total records: {total:,} | Range: {min_d} → {max_d}")
+
+          # Per-day summary
+          rows = conn.execute("""
+              SELECT date,
+                     COUNT(DISTINCT ticker) as tickers,
+                     COUNT(*) as records
+              FROM broker_summary
+              WHERE date BETWEEN ? AND ?
+              GROUP BY date ORDER BY date
+          """, (start, end)).fetchall()
+
+          with open('db_summary.csv', 'w', newline='') as f:
+              writer = csv.writer(f)
+              writer.writerow(['date', 'tickers', 'records', 'status'])
+              for date, tickers, records in rows:
+                  status = 'OK' if tickers >= 90 else 'LOW'
+                  writer.writerow([date, tickers, records, status])
+
+          print(f"Exported {len(rows)} days to db_summary.csv")
+          conn.close()
+          EOF
+
+      - name: Upload summary CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-summary
+          path: db_summary.csv
+          retention-days: 7
