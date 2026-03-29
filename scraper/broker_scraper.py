@@ -473,12 +473,22 @@ class StockbitBrokerScraper:
                 data = self.fetch_broker_summary(ticker, date_str, date_str)
 
                 if data is None or len(data.get("brokers", [])) == 0:
-                    logger.warning(f"  {ticker} {date_str}: no brokers returned (data={data})")
                     continue
 
                 count = 0
                 for b in data["brokers"]:
                     try:
+                        existing = (
+                            session.query(BrokerSummary)
+                            .filter_by(
+                                ticker=ticker,
+                                date=trading_date,
+                                broker_code=b["code"],
+                            )
+                            .first()
+                        )
+                        if existing:
+                            continue  # skip — record already in DB
                         bs = BrokerSummary(
                             ticker=ticker, date=trading_date,
                             broker_code=b["code"],
