@@ -23,16 +23,25 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Download database artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: scrape_broker_summary.yml
+          name: idx-database
+          path: .
+          if_no_artifact_found: warn
+        continue-on-error: true
+
       - name: Restore database
         run: |
           python3 << 'EOF'
-          import sqlite3, os, shutil, subprocess
+          import sqlite3, os, shutil
+
           OUTPUT = "idx_swing_trader.db"
           PART_A = "idx_broker_part_a.db"
           PART_B = "idx_broker_part_b.db"
-          result = subprocess.run([
-              "gh", "run", "download-artifact", "--name", "idx-database", "--dir", "."
-          ], capture_output=True)
+
           if os.path.exists(OUTPUT):
               count = sqlite3.connect(OUTPUT).execute(
                   "SELECT COUNT(*) FROM broker_summary"
@@ -40,6 +49,13 @@ jobs:
               if count > 400000:
                   print(f"✅ Artifact restored: {count:,} records")
                   exit(0)
+              print(f"⚠️ Artifact only has {count:,} records — rebuilding from split files")
+
+          if not os.path.exists(PART_A) or not os.path.exists(PART_B):
+              print("❌ FATAL: No artifact and no split files found. Cannot proceed.")
+              exit(1)
+
+          print("Rebuilding DB from split files...")
           shutil.copy(PART_A, OUTPUT)
           conn = sqlite3.connect(OUTPUT)
           conn.execute(f"ATTACH DATABASE '{PART_B}' AS part_b")
