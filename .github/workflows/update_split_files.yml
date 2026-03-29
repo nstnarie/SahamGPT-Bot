@@ -1,0 +1,87 @@
+name: Update Split Files
+
+on:
+  workflow_dispatch:
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download database artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: scrape_broker_summary.yml
+          name: idx-database
+          path: .
+          if_no_artifact_found: error
+
+      - name: Split database into part_a and part_b
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os, shutil
+
+          SOURCE = "idx_swing_trader.db"
+          PART_A = "idx_broker_part_a.db"
+          PART_B = "idx_broker_part_b.db"
+
+          if not os.path.exists(SOURCE):
+              print("❌ FATAL: idx_swing_trader.db not found.")
+              exit(1)
+
+          total = sqlite3.connect(SOURCE).execute(
+              "SELECT COUNT(*) FROM broker_summary"
+          ).fetchone()[0]
+          min_d, max_d = sqlite3.connect(SOURCE).execute(
+              "SELECT MIN(date), MAX(date) FROM broker_summary"
+          ).fetchone()
+          print(f"Source DB: {total:,} records | {min_d} → {max_d}")
+
+          # Part A — Jan to Mar 2025
+          print("Building Part A (Jan–Mar 2025)...")
+          if os.path.exists(PART_A):
+              os.remove(PART_A)
+          shutil.copy(SOURCE, PART_A)
+          conn_a = sqlite3.connect(PART_A)
+          conn_a.execute("DELETE FROM broker_summary WHERE date >= '2025-04-01'")
+          conn_a.commit()
+          count_a = conn_a.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          min_a, max_a = conn_a.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
+          conn_a.execute("VACUUM")
+          conn_a.close()
+          size_a = os.path.getsize(PART_A) / 1024 / 1024
+          print(f"Part A: {count_a:,} records | {min_a} → {max_a} | {size_a:.1f} MB")
+
+          # Part B — Apr to Jun 2025
+          print("Building Part B (Apr–Jun 2025)...")
+          if os.path.exists(PART_B):
+              os.remove(PART_B)
+          shutil.copy(SOURCE, PART_B)
+          conn_b = sqlite3.connect(PART_B)
+          conn_b.execute("DELETE FROM broker_summary WHERE date < '2025-04-01'")
+          conn_b.commit()
+          count_b = conn_b.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          min_b, max_b = conn_b.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
+          conn_b.execute("VACUUM")
+          conn_b.close()
+          size_b = os.path.getsize(PART_B) / 1024 / 1024
+          print(f"Part B: {count_b:,} records | {min_b} → {max_b} | {size_b:.1f} MB")
+
+          # Sanity check
+          if count_a + count_b != total:
+              print(f"❌ FATAL: count_a ({count_a:,}) + count_b ({count_b:,}) != total ({total:,})")
+              exit(1)
+
+          print(f"✅ Split verified: {count_a:,} + {count_b:,} = {total:,}")
+          EOF
+
+      - name: Commit split files to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add idx_broker_part_a.db idx_broker_part_b.db
+          git diff --staged --stat
+          git commit -m "chore: update split files to 468,484 record baseline (H1 2025 complete)"
+          git push
