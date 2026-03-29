@@ -35,21 +35,41 @@ jobs:
           pip install requests
 
       # ── FIXED: Added GH_TOKEN so gh CLI can download artifact from previous run ──
+      # ── FIXED: Using gh api instead of gh run download-artifact ──
       - name: Restore database
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 << 'EOF'
-          import sqlite3, os, shutil, subprocess
+          import sqlite3, os, shutil, subprocess, json
 
           OUTPUT = "idx_swing_trader.db"
           PART_A = "idx_broker_part_a.db"
           PART_B = "idx_broker_part_b.db"
 
-          # Try to download latest artifact first
-          result = subprocess.run([
-              "gh", "run", "download-artifact", "--name", "idx-database", "--dir", "."
-          ], capture_output=True)
+          # Try to download latest artifact via gh api
+          try:
+              result = subprocess.run([
+                  "gh", "api",
+                  "repos/${{ github.repository }}/actions/artifacts?name=idx-database&per_page=1",
+              ], capture_output=True, text=True)
+
+              data = json.loads(result.stdout)
+              artifacts = data.get("artifacts", [])
+
+              if artifacts:
+                  artifact_id = artifacts[0]["id"]
+                  print(f"Found artifact ID: {artifact_id}, downloading...")
+                  subprocess.run([
+                      "gh", "api",
+                      f"repos/${{ github.repository }}/actions/artifacts/{artifact_id}/zip",
+                      "--output", "idx-database.zip"
+                  ], capture_output=True)
+                  subprocess.run(["unzip", "-o", "idx-database.zip"], capture_output=True)
+              else:
+                  print("No artifact found via API")
+          except Exception as e:
+              print(f"Artifact API download failed: {e}")
 
           if os.path.exists(OUTPUT):
               count = sqlite3.connect(OUTPUT).execute(
