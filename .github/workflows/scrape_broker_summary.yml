@@ -66,7 +66,8 @@ jobs:
                       "--output", "idx-database.zip"
                   ], capture_output=True)
                   # GitHub artifact zips are nested — unzip twice if needed
-                  subprocess.run(["unzip", "-o", "idx-database.zip"], capture_output=True)
+                  subprocess.run(["unzip", "-o", "idx-database.zip"], cwd=os.getcwd(), capture_output=True, text=True)
+                  os.system("ls -la *.db 2>/dev/null || echo 'no db files found'")
                   # If db not found, try unzipping any inner zip
                   if not os.path.exists(OUTPUT):
                       inner_zips = [f for f in os.listdir('.') if f.endswith('.zip') and f != 'idx-database.zip']
