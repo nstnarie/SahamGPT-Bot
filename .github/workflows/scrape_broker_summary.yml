@@ -15,6 +15,10 @@ on:
         description: "Ticker batch (1=first 25, 2=next 25, 3=next 25, 4=rest, all=all tickers)"
         required: true
         default: "1"
+      tickers:
+        description: "Optional: comma-separated tickers to override batch (e.g. NIKL,PTRO)"
+        required: false
+        default: ""
 
 jobs:
   scrape:
@@ -108,10 +112,15 @@ jobs:
           session = get_session(engine)
 
           # Select ticker batch (to stay within GitHub Actions time limit)
+          # Optional: tickers input overrides batch entirely
+          custom_tickers = "${{ github.event.inputs.tickers }}".strip()
           batch = "${{ github.event.inputs.batch }}"
           tickers = LQ45_TICKERS
 
-          if batch == "1":
+          if custom_tickers:
+              tickers = [t.strip() for t in custom_tickers.split(",") if t.strip()]
+              print(f"Custom tickers override: {tickers}")
+          elif batch == "1":
               tickers = tickers[:25]
               print(f"Batch 1: tickers 1-25 ({tickers[0]} to {tickers[-1]})")
           elif batch == "2":
