@@ -47,7 +47,6 @@ jobs:
           PART_A = "idx_broker_part_a.db"
           PART_B = "idx_broker_part_b.db"
 
-          # Try to download latest artifact via gh api
           try:
               result = subprocess.run([
                   "gh", "api",
@@ -60,15 +59,16 @@ jobs:
               if artifacts:
                   artifact_id = artifacts[0]["id"]
                   print(f"Found artifact ID: {artifact_id}, downloading...")
-                  subprocess.run([
+                  dl_result = subprocess.run([
                       "gh", "api",
                       f"repos/${{ github.repository }}/actions/artifacts/{artifact_id}/zip",
+                      "-H", "Accept: application/zip",
                       "--output", "idx-database.zip"
-                  ], capture_output=True)
-                  # GitHub artifact zips are nested — unzip twice if needed
+                  ], capture_output=True, text=True)
+                  zip_size = os.path.getsize("idx-database.zip") if os.path.exists("idx-database.zip") else 0
+                  print(f"Downloaded zip size: {zip_size:,} bytes")
                   subprocess.run(["unzip", "-o", "idx-database.zip"], cwd=os.getcwd(), capture_output=True, text=True)
                   os.system("ls -la *.db 2>/dev/null || echo 'no db files found'")
-                  # If db not found, try unzipping any inner zip
                   if not os.path.exists(OUTPUT):
                       inner_zips = [f for f in os.listdir('.') if f.endswith('.zip') and f != 'idx-database.zip']
                       for z in inner_zips:
@@ -87,7 +87,6 @@ jobs:
                   exit(0)
               print(f"⚠️ Artifact only has {count:,} records — rebuilding from split files")
 
-          # Fallback: rebuild from split files committed in repo
           if not os.path.exists(PART_A) or not os.path.exists(PART_B):
               print("❌ FATAL: No artifact and no split files found. Cannot proceed.")
               exit(1)
