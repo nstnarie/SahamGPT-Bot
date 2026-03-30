@@ -1,7 +1,7 @@
 """
 DEVELOPER_CONTEXT.py — Session Continuity Document
 =====================================================
-Last updated: March 28, 2026
+Last updated: March 31, 2026
 
 This file provides full context for any AI assistant or developer
 continuing work on this project. Read this first before making changes.
@@ -139,8 +139,17 @@ Always follow these patterns when writing or modifying workflows:
          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   ❌ Never restore artifact without GH_TOKEN (silently fails)
 
+  ✅ Artifact download → use dawidd6/action-download-artifact@v6
+  ❌ Never use actions/download-artifact@v4 (only works for current run)
+
   ✅ Batch scraping → always run sequentially, one at a time
   ❌ Never run two batches in parallel (artifact collision)
+
+  ✅ Batch 4 (34 tickers) for a full quarter → split into 2 date-range parts
+  ❌ Never run batch 4 for a full quarter in one shot (~5.5hrs, too close to 6hr limit)
+
+  ✅ update_split_files.yml → requires permissions: contents: write
+  ❌ Without it, the push to repo will fail silently
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULE 7: HYPOTHESIS-DRIVEN DEVELOPMENT
@@ -199,7 +208,7 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — Broker summary data backfill in progress (batch scraping)"
+STATUS = "ACTIVE — H2 2025 broker data backfill in progress (Q3 complete, Q4 next)"
 
 CURRENT_VERSION = "v6"
 
@@ -211,43 +220,46 @@ LATEST_BACKTEST_RESULTS = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-03-28)
+# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-03-31)
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
 1. BROKER SUMMARY DATA BACKFILL
-   - Historical scrape workflows run in 4 batches (25 tickers each)
-   - Q1 2025 (Jan-Mar): VERIFIED COMPLETE ✅
-     * 237,302 records, 58 trading days, 105-107 tickers/day, 94 broker codes
-     * All 3 broker types populated (Asing/Lokal/Pemerintah)
-     * 6 apparent "missing" days confirmed as IDX public holidays
-   - Apr 1-7 2025: CONFIRMED PUBLIC HOLIDAY ✅ (Lebaran 2025 — no trading, no data expected)
-   - Apr 8 - May 15 2025: PARTIALLY COMPLETE ⚠️
-     * Previously showing only 71 tickers/day (should be ~105)
-     * Re-run currently IN PROGRESS
-   - Remaining periods to scrape after current run completes:
-     * 2025-05-16 to 2025-06-30 (verify if already complete)
-     * 2024 full year (not yet started)
+   - H1 2025 (Jan–Jun): COMPLETE ✅
+     * 468,484 records, all 109 tickers, 103–109 tickers/day
+     * Apr 1–7 confirmed Lebaran holiday — no data expected
+     * Split files updated: part_a (Jan–Mar) + part_b (Apr–Jun)
 
-2. PRICE DATA SCRAPE (initial_scrape.yml)
-   - To be run AFTER current broker scrape completes (sequential — shares idx-database artifact)
-   - Covers all 109 tickers including newly added PTRO and NIKL
-   - start_date: 2021-01-01, end_date: 2026-03-28
+   - Q3 2025 (Jul–Sep): COMPLETE ✅
+     * 756,370 total records (+287,886 delta from H1)
+     * 64 trading days, 105–107 tickers/day, zero low days
+     * Batch 4 split into 2 date-range parts (Jul 1–Aug 15, Aug 15–Sep 30)
+       to stay within GitHub Actions 6-hour timeout
+     * export_summary.yml verified clean, split files updated via update_split_files.yml
 
-3. TICKER UNIVERSE UPDATED ✅
+   - Q4 2025 (Oct–Dec): NOT STARTED ❌ — next priority
+   - 2024 full year: NOT STARTED ❌ — after H2 + backtest confirms improvement
+
+2. PRICE DATA
+   - initial_scrape.yml run on 2026-03-28
+   - Covers all 109 tickers from 2021-01-01 to 2026-03-28
+   - Includes full PTRO and NIKL price history ✅
+
+3. TICKER UNIVERSE UPDATED ✅ (as of 2026-03-28)
    - Added PTRO and NIKL to LQ45_TICKERS in scraper/price_scraper.py
    - Removed 8 duplicate tickers from SMC Liquid section
    - New total: 109 unique tickers
 """
 
 # ══════════════════════════════════════════════════════════════
-# DATABASE STATE (verified 2026-03-28)
+# DATABASE STATE (verified 2026-03-31)
 # ══════════════════════════════════════════════════════════════
 
 DATABASE_STATE = """
-File: idx_swing_trader.db (SQLite, ~34MB as of 2026-03-27)
-Total records: 401,185 (all tables combined)
-Broker summary date range: 2025-01-02 → 2025-06-30
+File: idx_swing_trader.db (SQLite)
+broker_summary record count: 756,370
+broker_summary date range: 2025-01-02 → 2025-09-30
+Unique tickers: 109 | Unique broker codes: 95
 
 Tables: broker_summary, stocks, daily_prices, foreign_flow,
         corporate_actions, index_daily, signal_log
@@ -265,18 +277,21 @@ broker_summary schema:
   net_value   REAL
   net_volume  REAL
 
-Q1 2025 data quality (verified):
-  - 58/58 trading days present ✅
-  - 105-107 tickers per day ✅
-  - 94 unique broker codes ✅
-  - Broker type distribution: Asing 82,982 | Lokal 132,609 | Pemerintah 21,711 ✅
-  - Net foreign flow Q1: Rp -20.3T (net sell) — consistent with IHSG weakness
+Data quality (verified via export_summary.yml):
+  - H1 2025 (Jan–Jun): 103–109 tickers/day ✅
+  - Q3 2025 (Jul–Sep): 105–107 tickers/day, 64 trading days ✅
+  - Apr 1–7 2025: confirmed Lebaran holiday — no data exists ✅
 
-Apr 1-7 2025: CONFIRMED PUBLIC HOLIDAY (Lebaran) — no data expected ✅
+Q3 2025 scraping detail:
+  Batch 1 (tickers 0–24):    +84,313  → 552,797 total
+  Batch 2 (tickers 25–49):   +70,317  → 623,128 total
+  Batch 3 (tickers 50–74):   +58,191  → 681,319 total
+  Batch 4 (Jul 1–Aug 15):    +38,676  → 719,995 total
+  Batch 4 (Aug 15–Sep 30):   +36,375  → 756,370 total
 
-Apr 8 - May 15 2025 data quality (NEEDS RE-VERIFICATION after current run):
-  - 24 days present but ALL at 71 tickers (should be ~105) ⚠️
-  - Expected to be fixed by current in-progress workflow run
+Split files (fallback if artifact unavailable):
+  - Updated after Q3 completion via update_split_files.yml
+  - idx_broker_part_a.db + idx_broker_part_b.db in repo root
 
 SHARED ARTIFACT WARNING:
   - idx-database is written by: scrape_broker_summary.yml, initial_scrape.yml,
@@ -401,6 +416,19 @@ KEY_LEARNINGS = """
     works on its own isolated copy, then uploads at the end —
     the last one to finish wins and the other's changes are lost.
     Always run sequentially. Verify by checking workflow files first.
+
+11. BATCH 4 NEEDS DATE-RANGE SPLITTING FOR FULL QUARTERS
+    Discovered Mar 31 2026: batch 4 covers 34 tickers (not 25).
+    A full quarter (~65 trading days) takes ~5.5 hours — dangerously
+    close to the GitHub Actions 6-hour timeout. Always split batch 4
+    into 2 date-range parts (~45 days each) for full-quarter runs.
+    The duplicate guard in scrape_historical makes overlap dates safe.
+
+12. USE dawidd6/action-download-artifact@v6 FOR ARTIFACT RESTORE
+    Discovered Mar 29 2026: actions/download-artifact@v4 only downloads
+    artifacts from the current run — silently returns nothing for previous
+    runs. dawidd6/action-download-artifact@v6 correctly fetches the most
+    recent artifact from any previous run. Always use v6.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -421,10 +449,6 @@ WEAK_SPOTS = """
 3. BROKER DATA NOT YET INTEGRATED INTO BACKTEST
    Current backtests use Yahoo Finance foreign flow estimates.
    Once Stockbit broker data is backfilled, signal quality should improve.
-
-4. APR-MAY 2025 DATA INCOMPLETE (being fixed)
-   71 tickers per day instead of ~105 — batch 4 scraper cut off mid-run.
-   Re-scrape in progress as of 2026-03-28.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -432,41 +456,34 @@ WEAK_SPOTS = """
 # ══════════════════════════════════════════════════════════════
 
 NEXT_STEPS = """
-IMMEDIATE (in progress):
-  ⏳ Re-run broker scrape: 2025-04-08 to 2025-05-15 (currently running)
+IMMEDIATE — NEXT UP:
+  ❌ Q4 2025 broker scrape (Oct–Dec). Refresh Stockbit token first.
+     batch: 1  |  2025-10-01 to 2025-12-31
+     batch: 2  |  2025-10-01 to 2025-12-31
+     batch: 3  |  2025-10-01 to 2025-12-31
+     batch: 4  |  2025-10-01 to 2025-11-15  ← part 1
+     batch: 4  |  2025-11-15 to 2025-12-31  ← part 2
+     After all batches: export_summary.yml (Oct–Dec) → update_split_files.yml
 
-AFTER CURRENT BROKER SCRAPE COMPLETES:
-  1. Remove debug logging from broker_scraper.py
-     (the logger.warning with data={data} added for Apr 1-7 investigation)
+AFTER Q4 SCRAPE COMPLETES:
+  1. Re-run backtests with 2025 real broker data
+     - Replace synthetic foreign flow with real Asing net_value from broker_summary
+     - If improvement confirmed → proceed to 2024 backfill
+     - If no improvement → tune signal logic first
 
-  2. Verify Apr 8 - May 15 data:
-     - Check all days now have ~105 tickers (not 71)
-     - Run verify_broker_data.py or manual SQL check
+  2. Backfill 2024 full year broker data (only if backtest confirms improvement)
+     - Run batches 1–4 for each quarter of 2024
+     - Re-run backtests with 2024 + 2025 real data
 
-  3. Run initial_scrape.yml for price data (SEQUENTIAL — after broker scrape fully done)
-     - start_date: 2021-01-01, end_date: 2026-03-28
-     - Covers PTRO and NIKL (newly added tickers)
-
-  4. Audit remaining broker periods:
-     - 2025-05-16 to 2025-06-30 (check if already ~105 tickers/day)
-     - If showing 71 tickers → re-run those batches too
-
-  5. Backfill 2024 full year broker data:
-     - Run batches 1-4 for 2024-01-01 to 2024-12-31
-     - 4 batches × ~4 date ranges = ~16 workflow runs
-
-  6. Integrate real broker data into signal_combiner.py:
+  3. Integrate real broker data into signal_combiner.py
      - Replace synthetic foreign flow with real Asing net_value from DB
-     - Use broker_summary table directly in signal generation
 
-  7. Re-run backtests with real broker data
-     - Expected improvement especially in 2024 results
+  4. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
+     - Use broker accumulation signal to decide hold vs exit
 
-  8. Fix 6-10 day weak spot using broker accumulation signal
+  5. Update daily_signals.yml to include live broker scraping each day
 
-  9. Update daily_signals.yml to include live broker scraping each day
-
-  10. Paper trade for 1 month → Go live
+  6. Paper trade 1 month → go live
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -510,4 +527,23 @@ Rate limit: ~40 requests per 5 minutes
 # ══════════════════════════════════════════════════════════════
 
 WORKFLOWS = """
-daily_signals.yml         — Week
+daily_signals.yml         — Weekday 16:35 WIB — full pipeline → Telegram (touches idx-database)
+initial_scrape.yml        — Manual — historical price download (touches idx-database)
+run_backtest.yml          — Manual — on-demand backtesting (touches idx-database)
+monthly_optimise.yml      — Monthly — parameter tuning (touches idx-database)
+scrape_broker_summary.yml — Manual — batch broker data scraping (touches idx-database)
+export_summary.yml        — Manual — export per-day ticker count CSV (read-only)
+bootstrap_database.yml    — Manual one-time — merges split files into artifact (touches idx-database)
+update_split_files.yml    — Manual — regenerates split files from artifact (read-only, pushes to repo)
+
+scrape_broker_summary.yml inputs:
+  start_date  — YYYY-MM-DD
+  end_date    — YYYY-MM-DD
+  batch       — 1 (tickers 0–24) / 2 (25–49) / 3 (50–74) / 4 (75+, 34 tickers) / all
+  tickers     — optional comma-separated override e.g. NIKL,PTRO (bypasses batch slicing)
+
+Runtime estimates:
+  Batches 1–3 (25 tickers) × 65 trading days: ~4.1 hours
+  Batch 4 (34 tickers) × 65 trading days:     ~5.5 hours → ALWAYS split into 2 date-range parts
+  Targeted backfill (2 tickers × 128 days):   ~37 minutes
+"""
