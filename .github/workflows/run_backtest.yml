@@ -108,6 +108,88 @@ jobs:
           print(f"Final broker_summary: {total:,} records")
           EOF
 
+      - name: Backfill missing price data
+        if: steps.check_db.outputs.exists == 'true'
+        run: |
+          python3 << 'EOF'
+          import sqlite3, time
+          import yfinance as yf
+          from datetime import date
+
+          DB = "idx_swing_trader.db"
+          START = "2021-01-01"
+
+          conn = sqlite3.connect(DB)
+
+          # Find tickers with broker data but no price data
+          missing = conn.execute("""
+              SELECT DISTINCT b.ticker
+              FROM broker_summary b
+              LEFT JOIN daily_prices d ON b.ticker = d.ticker
+              WHERE d.ticker IS NULL
+              ORDER BY b.ticker
+          """).fetchall()
+          missing = [r[0] for r in missing]
+          conn.close()
+
+          if not missing:
+              print("All tickers have price data — skipping backfill")
+              exit(0)
+
+          print(f"Backfilling price data for: {missing}")
+
+          conn = sqlite3.connect(DB)
+          for ticker in missing:
+              yf_ticker = f"{ticker}.JK"
+              print(f"  Fetching {yf_ticker}...")
+              try:
+                  df = yf.Ticker(yf_ticker).history(
+                      start=START, end=date.today().isoformat(), auto_adjust=False
+                  )
+                  if df.empty:
+                      print(f"    No data from Yahoo Finance for {yf_ticker}")
+                      continue
+
+                  df = df.reset_index()
+                  df.columns = [c.lower().replace(" ", "_") for c in df.columns]
+                  if "date" in df.columns:
+                      df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+                  if "adj_close" not in df.columns:
+                      df["adj_close"] = df["close"]
+                  df["value"] = df["close"] * df["volume"]
+                  df = df.dropna(subset=["close"])
+
+                  inserted = 0
+                  for _, row in df.iterrows():
+                      try:
+                          conn.execute("""
+                              INSERT OR IGNORE INTO daily_prices
+                                  (ticker, date, open, high, low, close, volume, value, adj_close)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          """, (
+                              ticker, row["date"],
+                              float(row.get("open") or 0),
+                              float(row.get("high") or 0),
+                              float(row.get("low") or 0),
+                              float(row.get("close") or 0),
+                              float(row.get("volume") or 0),
+                              float(row.get("value") or 0),
+                              float(row.get("adj_close") or row.get("close") or 0),
+                          ))
+                          inserted += 1
+                      except Exception as e:
+                          pass
+                  conn.commit()
+                  print(f"    Inserted {inserted} rows for {ticker}")
+                  time.sleep(1)
+
+              except Exception as e:
+                  print(f"    Failed to fetch {yf_ticker}: {e}")
+
+          conn.close()
+          print("Backfill complete")
+          EOF
+
       - name: Scrape data (if no database)
         if: steps.check_db.outputs.exists == 'false'
         run: |
