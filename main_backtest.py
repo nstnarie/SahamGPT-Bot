@@ -24,7 +24,8 @@ from config import FrameworkConfig, DATABASE_URL
 from database.schema import create_all_tables, get_session, get_engine, Stock
 from database.data_loader import (
     load_prices_as_dataframe, load_index_df,
-    load_foreign_flow_df, data_quality_check,
+    load_foreign_flow_df, load_broker_summary_as_ff_df,
+    data_quality_check,
 )
 from scraper.price_scraper import PriceScraper, LQ45_TICKERS
 from scraper.flow_scraper import FlowScraper, FundamentalScraper
@@ -54,6 +55,8 @@ def parse_args():
     parser.add_argument("--scrape", action="store_true",
                         help="Force re-scrape all data")
     parser.add_argument("--tickers", nargs="+", default=None)
+    parser.add_argument("--real-broker", action="store_true",
+                        help="Use real Asing broker data instead of synthetic foreign flow")
     parser.add_argument("--output", default="reports")
     parser.add_argument("--log-level", default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -117,6 +120,7 @@ def main():
         sys.exit(1)
 
     logger.info(f"{len(good_tickers)} tickers with data")
+    logger.info(f"Foreign flow source: {'real broker data (Asing)' if args.real_broker else 'synthetic estimate'}")
 
     # Load data
     start_dt = pd.Timestamp(args.start).date()
@@ -130,7 +134,12 @@ def main():
         pdf = load_prices_as_dataframe(session, ticker, start_dt, end_dt)
         if not pdf.empty:
             universe_prices[ticker] = pdf
-        ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
+        if args.real_broker:
+            ff = load_broker_summary_as_ff_df(session, ticker, start_dt, end_dt)
+            if ff.empty:
+                ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
+        else:
+            ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
         if not ff.empty:
             foreign_flows[ticker] = ff
         stock = session.query(Stock).filter_by(ticker=ticker).first()

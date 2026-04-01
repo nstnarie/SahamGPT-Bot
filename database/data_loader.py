@@ -186,6 +186,48 @@ def load_foreign_flow_df(session: Session, ticker: str,
     return df
 
 
+def load_broker_summary_as_ff_df(session: Session, ticker: str,
+                                  start_date: Optional[date] = None,
+                                  end_date: Optional[date] = None) -> pd.DataFrame:
+    """
+    Load real Asing (foreign) net flow from broker_summary table,
+    aggregated per day across all foreign broker codes.
+
+    Returns a DataFrame with a net_foreign_value column — same interface
+    as load_foreign_flow_df(), so it is a drop-in replacement for the
+    foreign_flows dict used in SignalCombiner._add_foreign_flow_signals().
+    """
+    q = (
+        session.query(BrokerSummary)
+        .filter(
+            BrokerSummary.ticker == ticker,
+            BrokerSummary.broker_type == "Asing",
+        )
+    )
+    if start_date:
+        q = q.filter(BrokerSummary.date >= start_date)
+    if end_date:
+        q = q.filter(BrokerSummary.date <= end_date)
+    q = q.order_by(BrokerSummary.date)
+
+    rows = q.all()
+    if not rows:
+        return pd.DataFrame()
+
+    data = [{"date": r.date, "net_value": r.net_value or 0.0} for r in rows]
+    df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])
+
+    # Sum all Asing broker codes per day → single net_foreign_value per date
+    df = (
+        df.groupby("date")["net_value"]
+        .sum()
+        .rename("net_foreign_value")
+        .to_frame()
+    )
+    return df
+
+
 def load_index_df(session: Session, index_code: str = "IHSG",
                    start_date: Optional[date] = None,
                    end_date: Optional[date] = None) -> pd.DataFrame:
