@@ -1,7 +1,7 @@
 """
 DEVELOPER_CONTEXT.py — Session Continuity Document
 =====================================================
-Last updated: March 31, 2026
+Last updated: April 1, 2026
 
 This file provides full context for any AI assistant or developer
 continuing work on this project. Read this first before making changes.
@@ -208,7 +208,7 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — H2 2025 broker data backfill in progress (Q3 complete, Q4 next)"
+STATUS = "ACTIVE — Full 2025 broker data complete. Next: backtest with real broker data."
 
 CURRENT_VERSION = "v6"
 
@@ -216,49 +216,42 @@ LATEST_BACKTEST_RESULTS = {
     "2024": {"trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68},
     "2025": {"trades": 55, "win_rate": "31%", "pnl": "Rp +60M", "pf": 1.38},
     "combined": {"trades": 100, "win_rate": "32%", "pnl": "Rp +23M", "pf": 1.08},
-    "note": "2025 is FIRST PROFITABLE YEAR. Trend exit generated Rp +240M from 12 trades.",
+    "note": "Results above use SYNTHETIC foreign flow. Re-run with real broker data is next priority.",
 }
 
 # ══════════════════════════════════════════════════════════════
-# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-03-31)
+# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-04-01)
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
-1. BROKER SUMMARY DATA BACKFILL
-   - H1 2025 (Jan–Jun): COMPLETE ✅
-     * 468,484 records, all 109 tickers, 103–109 tickers/day
-     * Apr 1–7 confirmed Lebaran holiday — no data expected
-     * Split files updated: part_a (Jan–Mar) + part_b (Apr–Jun)
+1. BROKER SUMMARY DATA BACKFILL — 2025 FULLY COMPLETE ✅
+   - H1 2025 (Jan–Jun): COMPLETE ✅ — 103–109 tickers/day
+   - Q3 2025 (Jul–Sep): COMPLETE ✅ — 64 days, 105–107 tickers/day
+   - Q4 2025 (Oct–Dec): COMPLETE ✅ — 63 days, 104–107 tickers/day
+   - Total records: 1,043,576
+   - Split files updated: 242,321 + 801,255 = 1,043,576 ✅
+   - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
-   - Q3 2025 (Jul–Sep): COMPLETE ✅
-     * 756,370 total records (+287,886 delta from H1)
-     * 64 trading days, 105–107 tickers/day, zero low days
-     * Batch 4 split into 2 date-range parts (Jul 1–Aug 15, Aug 15–Sep 30)
-       to stay within GitHub Actions 6-hour timeout
-     * export_summary.yml verified clean, split files updated via update_split_files.yml
+2. 2024 BROKER DATA — NOT STARTED ❌
+   - Deferred until 2025 backtest with real data confirms improvement
 
-   - Q4 2025 (Oct–Dec): NOT STARTED ❌ — next priority
-   - 2024 full year: NOT STARTED ❌ — after H2 + backtest confirms improvement
-
-2. PRICE DATA
+3. PRICE DATA ✅
    - initial_scrape.yml run on 2026-03-28
    - Covers all 109 tickers from 2021-01-01 to 2026-03-28
-   - Includes full PTRO and NIKL price history ✅
+   - Includes full PTRO and NIKL price history
 
-3. TICKER UNIVERSE UPDATED ✅ (as of 2026-03-28)
-   - Added PTRO and NIKL to LQ45_TICKERS in scraper/price_scraper.py
-   - Removed 8 duplicate tickers from SMC Liquid section
-   - New total: 109 unique tickers
+4. TICKER UNIVERSE ✅ (as of 2026-03-28)
+   - 109 unique tickers (added PTRO, NIKL; removed 8 duplicates)
 """
 
 # ══════════════════════════════════════════════════════════════
-# DATABASE STATE (verified 2026-03-31)
+# DATABASE STATE (verified 2026-04-01)
 # ══════════════════════════════════════════════════════════════
 
 DATABASE_STATE = """
 File: idx_swing_trader.db (SQLite)
-broker_summary record count: 756,370
-broker_summary date range: 2025-01-02 → 2025-09-30
+broker_summary record count: 1,043,576
+broker_summary date range: 2025-01-02 → 2025-12-31
 Unique tickers: 109 | Unique broker codes: 95
 
 Tables: broker_summary, stocks, daily_prices, foreign_flow,
@@ -278,19 +271,21 @@ broker_summary schema:
   net_volume  REAL
 
 Data quality (verified via export_summary.yml):
-  - H1 2025 (Jan–Jun): 103–109 tickers/day ✅
-  - Q3 2025 (Jul–Sep): 105–107 tickers/day, 64 trading days ✅
+  - H1 2025 (Jan–Jun):  103–109 tickers/day ✅
+  - Q3 2025 (Jul–Sep):  105–107 tickers/day, 64 trading days ✅
+  - Q4 2025 (Oct–Dec):  104–107 tickers/day, 63 trading days ✅
   - Apr 1–7 2025: confirmed Lebaran holiday — no data exists ✅
 
-Q3 2025 scraping detail:
-  Batch 1 (tickers 0–24):    +84,313  → 552,797 total
-  Batch 2 (tickers 25–49):   +70,317  → 623,128 total
-  Batch 3 (tickers 50–74):   +58,191  → 681,319 total
-  Batch 4 (Jul 1–Aug 15):    +38,676  → 719,995 total
-  Batch 4 (Aug 15–Sep 30):   +36,375  → 756,370 total
+Q4 2025 scraping detail:
+  Batch 1 (tickers 0–24):    +84,209  → 840,579 total
+  Batch 2 (tickers 25–49):   +69,214  → 909,793 total
+  Batch 3 (tickers 50–74):   +58,359  → 968,152 total
+  Batch 4 (Oct 1–Nov 15):    +40,314  → 1,008,466 total
+  Batch 4 (Nov 15–Dec 31):   +35,110  → 1,043,576 total
 
 Split files (fallback if artifact unavailable):
-  - Updated after Q3 completion via update_split_files.yml
+  - Updated after Q4 completion via update_split_files.yml
+  - Split verified: 242,321 + 801,255 = 1,043,576 ✅
   - idx_broker_part_a.db + idx_broker_part_b.db in repo root
 
 SHARED ARTIFACT WARNING:
@@ -347,8 +342,9 @@ VERSION_HISTORY = {
             "CANDLE FILTER: upper shadow >40% or close in bottom 1/3 → rejected (MYOR fix)",
             "Real Stockbit broker flow scraping via Playwright (replaces synthetic estimates)",
         ],
-        "result": "2025: +60M PROFITABLE. 2024: -37M near breakeven.",
+        "result": "2025: +60M PROFITABLE (synthetic FF). 2024: -37M near breakeven.",
         "star": "TREND_EXIT: 12 trades, 11 wins, avg +26.5%, Rp +240M total",
+        "note": "Backtest with REAL broker data not yet run — expected to improve results.",
     },
 }
 
@@ -448,7 +444,7 @@ WEAK_SPOTS = """
 
 3. BROKER DATA NOT YET INTEGRATED INTO BACKTEST
    Current backtests use Yahoo Finance foreign flow estimates.
-   Once Stockbit broker data is backfilled, signal quality should improve.
+   Full 2025 real broker data is now available — integration is next priority.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -457,33 +453,31 @@ WEAK_SPOTS = """
 
 NEXT_STEPS = """
 IMMEDIATE — NEXT UP:
-  ❌ Q4 2025 broker scrape (Oct–Dec). Refresh Stockbit token first.
-     batch: 1  |  2025-10-01 to 2025-12-31
-     batch: 2  |  2025-10-01 to 2025-12-31
-     batch: 3  |  2025-10-01 to 2025-12-31
-     batch: 4  |  2025-10-01 to 2025-11-15  ← part 1
-     batch: 4  |  2025-11-15 to 2025-12-31  ← part 2
-     After all batches: export_summary.yml (Oct–Dec) → update_split_files.yml
+  Backtest with real 2025 broker data:
+  1. Integrate real Asing net_value from broker_summary into backtest/engine.py
+     - Replace synthetic foreign flow with real data
+     - Backtest path only: main_backtest.py → backtest/engine.py
+     - Do NOT touch live signal path: main_daily.py → signal_combiner.py
+  2. Run backtest over full 2025 period
+  3. Compare vs synthetic baseline: 55 trades, 31% WR, Rp +60M, PF 1.38
+  4. If improvement confirmed → proceed to 2024 backfill
+     If no improvement → tune signal logic first
 
-AFTER Q4 SCRAPE COMPLETES:
-  1. Re-run backtests with 2025 real broker data
-     - Replace synthetic foreign flow with real Asing net_value from broker_summary
-     - If improvement confirmed → proceed to 2024 backfill
-     - If no improvement → tune signal logic first
+AFTER 2025 BACKTEST CONFIRMS IMPROVEMENT:
+  5. Backfill 2024 full year broker data. Refresh Stockbit token before each session.
+     Q1 2024: batches 1→2→3, then batch 4 split: Jan 1–Feb 15, Feb 15–Mar 31
+     Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
+     Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
+     Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
+     After each quarter: export_summary.yml → update_split_files.yml
+  6. Re-run backtests with 2024 + 2025 real broker data
 
-  2. Backfill 2024 full year broker data (only if backtest confirms improvement)
-     - Run batches 1–4 for each quarter of 2024
-     - Re-run backtests with 2024 + 2025 real data
-
-  3. Integrate real broker data into signal_combiner.py
-     - Replace synthetic foreign flow with real Asing net_value from DB
-
-  4. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
-     - Use broker accumulation signal to decide hold vs exit
-
-  5. Update daily_signals.yml to include live broker scraping each day
-
-  6. Paper trade 1 month → go live
+INTEGRATION & IMPROVEMENT:
+  7. Integrate real broker data into signal_combiner.py (live signals)
+  8. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
+     Use broker accumulation signal to decide hold vs exit
+  9. Update daily_signals.yml to include live broker scraping each day
+  10. Paper trade 1 month → go live
 """
 
 # ══════════════════════════════════════════════════════════════
