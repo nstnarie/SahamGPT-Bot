@@ -1,7 +1,7 @@
 """
 DEVELOPER_CONTEXT.py — Session Continuity Document
 =====================================================
-Last updated: April 1, 2026
+Last updated: April 2, 2026
 
 This file provides full context for any AI assistant or developer
 continuing work on this project. Read this first before making changes.
@@ -208,15 +208,26 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — Full 2025 broker data complete. Next: backtest with real broker data."
+STATUS = "ACTIVE — Real broker backtest complete (2025, PF 1.78). Next: 2024 broker data backfill."
 
 CURRENT_VERSION = "v6"
 
 LATEST_BACKTEST_RESULTS = {
-    "2024": {"trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68},
-    "2025": {"trades": 55, "win_rate": "31%", "pnl": "Rp +60M", "pf": 1.38},
-    "combined": {"trades": 100, "win_rate": "32%", "pnl": "Rp +23M", "pf": 1.08},
-    "note": "Results above use SYNTHETIC foreign flow. Re-run with real broker data is next priority.",
+    "2025_synthetic": {
+        "trades": 55, "win_rate": "31%", "pnl": "Rp +60M", "pf": 1.38,
+        "note": "SUPERSEDED. Used synthetic FF from ForeignFlow table.",
+    },
+    "2025_real_broker": {
+        "trades": 41, "win_rate": "34.1%", "pnl": "Rp +73M", "pf": 1.78,
+        "total_return": "7.30%", "max_drawdown": "-2.82%",
+        "sharpe": 0.27, "sortino": 0.52, "calmar": 2.69,
+        "note": "CURRENT BASELINE. Real Asing flow from broker_summary. --real-broker flag.",
+        "star_trade": "PTRO: +Rp 39M (+45.1%, 26 days) + ANTM: +Rp 27.5M (+45.4%)",
+    },
+    "2024": {
+        "trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68,
+        "note": "Synthetic FF only. Real broker data backfill pending.",
+    },
 }
 
 # ══════════════════════════════════════════════════════════════
@@ -233,15 +244,22 @@ IN_PROGRESS = """
    - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
 2. 2024 BROKER DATA — NOT STARTED ❌
-   - Deferred until 2025 backtest with real data confirms improvement
+   - 2025 real-broker backtest confirmed improvement (PF 1.37→1.78)
+   - 2024 backfill is now the next priority
 
 3. PRICE DATA ✅
    - initial_scrape.yml run on 2026-03-28
-   - Covers all 109 tickers from 2021-01-01 to 2026-03-28
-   - Includes full PTRO and NIKL price history
+   - Covers all 107 tickers from 2021-01-01 to 2026-03-28
+   - PTRO and NIKL were initially missing from daily_prices despite being in
+     broker_summary. Fixed via self-healing backfill step in run_backtest.yml.
 
 4. TICKER UNIVERSE ✅ (as of 2026-03-28)
    - 109 unique tickers (added PTRO, NIKL; removed 8 duplicates)
+
+5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-02)
+   - 2025 full year with real Asing flow: 41 trades, 34.1% WR, PF 1.78, +Rp 73M
+   - Integration confirmed working: --real-broker flag in run_backtest.yml
+   - Self-healing merge step ensures broker_summary always has 1,043,576 records
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -252,7 +270,8 @@ DATABASE_STATE = """
 File: idx_swing_trader.db (SQLite)
 broker_summary record count: 1,043,576
 broker_summary date range: 2025-01-02 → 2025-12-31
-Unique tickers: 109 | Unique broker codes: 95
+Unique tickers in broker_summary: 109 | Unique broker codes: 95
+Unique tickers in daily_prices: 107 (PTRO and NIKL backfilled via run_backtest.yml self-heal)
 
 Tables: broker_summary, stocks, daily_prices, foreign_flow,
         corporate_actions, index_daily, signal_log
@@ -405,6 +424,27 @@ KEY_LEARNINGS = """
    python3 -c "..." with nested quotes causes SyntaxError.
    Always use python3 << 'EOF' ... EOF pattern in GitHub Actions workflows.
 
+13. LOKAL AGGREGATE FLOW IS NOISE — USE ASING-ONLY
+    Tried (Apr 2026): detect dominant investor type per ticker by comparing
+    avg |Asing net| vs avg |Lokal net|. Failed catastrophically (PF 0.71, -Rp 31M).
+    Root cause: 100+ domestic broker codes aggregated always dwarf ~20 foreign codes
+    by raw volume — nearly every stock becomes "Lokal-dominated" and Lokal aggregate
+    flow is noise. Asing-only is correct. For non-foreign-driven stocks,
+    signal_combiner.py's is_foreign_driven check (Asing ratio > 5% of daily value)
+    already skips the FF filter automatically — no special code needed.
+
+14. MISSING PRICE DATA SILENTLY KILLS TICKERS
+    PTRO and NIKL had full 2025 broker data (235+ days of Asing activity) but ZERO
+    price history in daily_prices. The engine silently skipped them every backtest.
+    PTRO alone was worth +Rp 39M (+45.1%) in 2025. Fix: run_backtest.yml now has a
+    self-healing backfill step that detects and fetches missing tickers from Yahoo Finance.
+
+15. POSITION SIZING IS ALREADY PERCENTAGE-BASED
+    Not fixed-amount. Engine uses: 1.5% equity risk/trade, 12% max per position,
+    90% max total exposure, 30% max per sector, 5% settlement buffer.
+    Natural max ~7-8 concurrent positions. No hard limit needed.
+    Located in backtest/portfolio.py:74-126.
+
 10. NEVER RUN WORKFLOWS SHARING idx-database IN PARALLEL
     Discovered Mar 28 2026: running scrape_broker_summary.yml and
     initial_scrape.yml simultaneously risks one workflow overwriting
@@ -440,11 +480,14 @@ WEAK_SPOTS = """
 
 2. 2024 STILL SLIGHTLY NEGATIVE (-37M)
    Fewer big trend winners in 2024 (3 vs 9 in 2025).
-   Could be market conditions, or broker data might improve entry timing.
+   Could be market conditions, or 2024 broker data might improve entry timing.
+   Must backfill 2024 broker data and re-test before drawing conclusions.
 
-3. BROKER DATA NOT YET INTEGRATED INTO BACKTEST
-   Current backtests use Yahoo Finance foreign flow estimates.
-   Full 2025 real broker data is now available — integration is next priority.
+3. ALPHA STILL NEGATIVE vs IHSG
+   2025 real-broker: +7.30% vs IHSG +20.71%. Alpha = -13.99%.
+   Model protects capital well (max DD -2.82% vs IHSG -17.76%)
+   but can't match the bull run. May require sector rotation or
+   leverage to close the gap — needs more data before deciding.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -453,31 +496,33 @@ WEAK_SPOTS = """
 
 NEXT_STEPS = """
 IMMEDIATE — NEXT UP:
-  Backtest with real 2025 broker data:
-  1. Integrate real Asing net_value from broker_summary into backtest/engine.py
-     - Replace synthetic foreign flow with real data
-     - Backtest path only: main_backtest.py → backtest/engine.py
-     - Do NOT touch live signal path: main_daily.py → signal_combiner.py
-  2. Run backtest over full 2025 period
-  3. Compare vs synthetic baseline: 55 trades, 31% WR, Rp +60M, PF 1.38
-  4. If improvement confirmed → proceed to 2024 backfill
-     If no improvement → tune signal logic first
+  Backfill 2024 full year broker data. Refresh Stockbit token before each session.
+  1. Q1 2024: batches 1→2→3, then batch 4 split: Jan 1–Feb 15, Feb 15–Mar 31
+  2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
+  3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
+  4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
+  After each quarter: export_summary.yml → update_split_files.yml
 
-AFTER 2025 BACKTEST CONFIRMS IMPROVEMENT:
-  5. Backfill 2024 full year broker data. Refresh Stockbit token before each session.
-     Q1 2024: batches 1→2→3, then batch 4 split: Jan 1–Feb 15, Feb 15–Mar 31
-     Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
-     Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
-     Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
-     After each quarter: export_summary.yml → update_split_files.yml
-  6. Re-run backtests with 2024 + 2025 real broker data
+AFTER 2024 BACKFILL:
+  5. Re-run backtest for 2024 with real_broker=true
+  6. Compare 2024 real vs synthetic (-37M) — expect improvement
+  7. Run combined 2024+2025 backtest for full picture
 
 INTEGRATION & IMPROVEMENT:
-  7. Integrate real broker data into signal_combiner.py (live signals)
-  8. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
+  8. Integrate real broker data into signal_combiner.py (live signals)
+     - Replace synthetic ForeignFlow with real Asing net_value from broker_summary
+     - This is the LIVE path — test carefully before deploying
+  9. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
      Use broker accumulation signal to decide hold vs exit
-  9. Update daily_signals.yml to include live broker scraping each day
-  10. Paper trade 1 month → go live
+  10. Update daily_signals.yml to include live broker scraping each day
+  11. Paper trade 1 month → go live
+
+COMPLETED (April 2, 2026):
+  ✅ Real broker data integrated into backtest via --real-broker flag
+  ✅ Self-healing merge step in run_backtest.yml (broker_summary from split files)
+  ✅ Self-healing price backfill in run_backtest.yml (PTRO/NIKL from Yahoo Finance)
+  ✅ 2025 real-broker backtest: 41 trades, 34.1% WR, PF 1.78, +Rp 73M
+  ✅ Dominant investor detection (v3) rejected — Lokal aggregate is noise
 """
 
 # ══════════════════════════════════════════════════════════════
