@@ -64,6 +64,50 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Merge broker data from split files if needed
+        if: steps.check_db.outputs.exists == 'true'
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os
+
+          DB = "idx_swing_trader.db"
+          PART_A = "idx_broker_part_a.db"
+          PART_B = "idx_broker_part_b.db"
+
+          conn = sqlite3.connect(DB)
+          count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          conn.close()
+
+          if count > 0:
+              print(f"broker_summary already has {count:,} records — skipping merge")
+              exit(0)
+
+          print("broker_summary is empty — merging from split files...")
+
+          if not os.path.exists(PART_A) or not os.path.exists(PART_B):
+              print("Split files not found in repo — cannot merge, proceeding without broker data")
+              exit(0)
+
+          conn = sqlite3.connect(DB)
+          for part in [PART_A, PART_B]:
+              conn.execute(f"ATTACH DATABASE '{part}' AS part_db")
+              cur = conn.execute("""
+                  INSERT OR IGNORE INTO broker_summary
+                      (ticker, date, broker_code, broker_type,
+                       buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume)
+                  SELECT ticker, date, broker_code, broker_type,
+                         buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume
+                  FROM part_db.broker_summary
+              """)
+              print(f"  Inserted from {part}: {cur.rowcount:,} records")
+              conn.commit()
+              conn.execute("DETACH DATABASE part_db")
+
+          total = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          conn.close()
+          print(f"Final broker_summary: {total:,} records")
+          EOF
+
       - name: Scrape data (if no database)
         if: steps.check_db.outputs.exists == 'false'
         run: |
