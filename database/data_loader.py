@@ -190,18 +190,24 @@ def load_broker_summary_as_ff_df(session: Session, ticker: str,
                                   start_date: Optional[date] = None,
                                   end_date: Optional[date] = None) -> pd.DataFrame:
     """
-    Load real Asing (foreign) net flow from broker_summary table,
-    aggregated per day across all foreign broker codes.
+    Load institutional flow from broker_summary, auto-detecting the dominant
+    investor type (Asing or Lokal) for this ticker.
 
-    Returns a DataFrame with a net_foreign_value column — same interface
-    as load_foreign_flow_df(), so it is a drop-in replacement for the
-    foreign_flows dict used in SignalCombiner._add_foreign_flow_signals().
+    Compares average absolute daily activity for Asing vs Lokal across the
+    full period. Returns the dominant type's daily net flow as net_foreign_value
+    — same interface as load_foreign_flow_df().
+
+    This ensures the signal combiner checks the right investor type:
+    - Asing-driven stocks (e.g. ADRO): uses Asing flow → correctly blocks
+      when foreigners are selling
+    - Lokal-driven stocks (e.g. DSNG, EMTK): uses Lokal flow → correctly
+      confirms when domestic institutions are accumulating
     """
     q = (
         session.query(BrokerSummary)
         .filter(
             BrokerSummary.ticker == ticker,
-            BrokerSummary.broker_type == "Asing",
+            BrokerSummary.broker_type.in_(["Asing", "Lokal"]),
         )
     )
     if start_date:
@@ -214,18 +220,25 @@ def load_broker_summary_as_ff_df(session: Session, ticker: str,
     if not rows:
         return pd.DataFrame()
 
-    data = [{"date": r.date, "net_value": r.net_value or 0.0} for r in rows]
+    data = [{"date": r.date, "broker_type": r.broker_type, "net_value": r.net_value or 0.0}
+            for r in rows]
     df = pd.DataFrame(data)
     df["date"] = pd.to_datetime(df["date"])
 
-    # Sum all Asing broker codes per day → single net_foreign_value per date
-    df = (
-        df.groupby("date")["net_value"]
-        .sum()
-        .rename("net_foreign_value")
-        .to_frame()
-    )
-    return df
+    # Sum per day per investor type
+    pivot = df.groupby(["date", "broker_type"])["net_value"].sum().unstack(fill_value=0)
+
+    asing = pivot.get("Asing", pd.Series(0.0, index=pivot.index))
+    lokal = pivot.get("Lokal", pd.Series(0.0, index=pivot.index))
+
+    # Auto-detect dominant institutional type by average absolute activity
+    asing_avg = asing.abs().mean()
+    lokal_avg = lokal.abs().mean()
+
+    dominant = lokal if lokal_avg > asing_avg else asing
+
+    result = dominant.rename("net_foreign_value").to_frame()
+    return result
 
 
 def load_index_df(session: Session, index_code: str = "IHSG",
