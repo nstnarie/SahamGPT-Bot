@@ -169,11 +169,14 @@ class SignalCombiner:
 
         df["net_foreign"] = ff_series.fillna(0)
 
-        # Auto-detect foreign-driven stocks
-        avg_ff = df["net_foreign"].abs().rolling(60, min_periods=20).mean()
-        avg_value = (df["close"] * df["volume"]).rolling(60, min_periods=20).mean()
-        ff_ratio = avg_ff / avg_value.replace(0, np.nan)
-        df["is_foreign_driven"] = ff_ratio.fillna(0) > 0.05
+        # Auto-detect foreign-driven stocks using directional consistency
+        # consistency = abs(sum(net)) / sum(abs(net)) over 60 days
+        # High consistency = foreigners persistently on one side (informative signal)
+        # Low consistency = random buy/sell (noise — FF filter would hurt)
+        rolling_sum = df["net_foreign"].rolling(60, min_periods=20).sum()
+        rolling_abs_sum = df["net_foreign"].abs().rolling(60, min_periods=20).sum()
+        consistency = rolling_sum.abs() / rolling_abs_sum.replace(0, np.nan)
+        df["is_foreign_driven"] = consistency.fillna(0) > 0.20
 
         # ── Check 1: Recent positive days (existing logic) ──
         df["ff_positive"] = (df["net_foreign"] > cfg.min_net_foreign_value).astype(int)

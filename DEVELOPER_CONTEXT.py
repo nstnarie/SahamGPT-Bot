@@ -208,21 +208,29 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — Real broker backtest complete (2025, PF 1.78). Next: 2024 broker data backfill."
+STATUS = "ACTIVE — v7 backtest complete (2025, PF 1.88, +Rp 135M). Next: 2024 broker data backfill."
 
-CURRENT_VERSION = "v6"
+CURRENT_VERSION = "v7"
 
 LATEST_BACKTEST_RESULTS = {
     "2025_synthetic": {
         "trades": 55, "win_rate": "31%", "pnl": "Rp +60M", "pf": 1.38,
         "note": "SUPERSEDED. Used synthetic FF from ForeignFlow table.",
     },
-    "2025_real_broker": {
+    "2025_real_broker_v6": {
         "trades": 41, "win_rate": "34.1%", "pnl": "Rp +73M", "pf": 1.78,
         "total_return": "7.30%", "max_drawdown": "-2.82%",
         "sharpe": 0.27, "sortino": 0.52, "calmar": 2.69,
-        "note": "CURRENT BASELINE. Real Asing flow from broker_summary. --real-broker flag.",
-        "star_trade": "PTRO: +Rp 39M (+45.1%, 26 days) + ANTM: +Rp 27.5M (+45.4%)",
+        "note": "SUPERSEDED by v7. is_foreign_driven used abs-ratio > 5% (too permissive).",
+        "star_trade": "PTRO: +Rp 39M (+45.1%) + ANTM: +Rp 27.5M (+45.4%)",
+    },
+    "2025_real_broker_v7": {
+        "trades": 59, "win_rate": "33.9%", "pnl": "Rp +135M", "pf": 1.88,
+        "total_return": "13.66%", "max_drawdown": "-4.75%",
+        "sharpe": 0.93, "sortino": 1.70, "calmar": 2.99, "exposure": "65.3%",
+        "note": "CURRENT BASELINE. is_foreign_driven = directional consistency > 20%.",
+        "star_trade": "TINS: +Rp 54M (+118%) + PTRO: +Rp 39M (+45%) + EMTK: +Rp 32M (+77%)",
+        "trend_exit": "11 trades, all winners, Rp +259M total",
     },
     "2024": {
         "trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68,
@@ -256,8 +264,9 @@ IN_PROGRESS = """
 4. TICKER UNIVERSE ✅ (as of 2026-03-28)
    - 109 unique tickers (added PTRO, NIKL; removed 8 duplicates)
 
-5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-02)
-   - 2025 full year with real Asing flow: 41 trades, 34.1% WR, PF 1.78, +Rp 73M
+5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v7)
+   - 2025 full year with real Asing flow: 59 trades, 33.9% WR, PF 1.88, +Rp 135M
+   - v7 change: is_foreign_driven = directional consistency > 20% (was abs-ratio > 5%)
    - Integration confirmed working: --real-broker flag in run_backtest.yml
    - Self-healing merge step ensures broker_summary always has 1,043,576 records
 """
@@ -361,9 +370,20 @@ VERSION_HISTORY = {
             "CANDLE FILTER: upper shadow >40% or close in bottom 1/3 → rejected (MYOR fix)",
             "Real Stockbit broker flow scraping via Playwright (replaces synthetic estimates)",
         ],
-        "result": "2025: +60M PROFITABLE (synthetic FF). 2024: -37M near breakeven.",
-        "star": "TREND_EXIT: 12 trades, 11 wins, avg +26.5%, Rp +240M total",
-        "note": "Backtest with REAL broker data not yet run — expected to improve results.",
+        "result": "2025 real broker: 41 trades, 34.1% WR, PF 1.78, +Rp 73M. SUPERSEDED by v7.",
+        "star": "PTRO: +Rp 39M (+45.1%) + ANTM: +Rp 27.5M (+45.4%)",
+    },
+    "v7": {
+        "signal": "v6 + directional consistency for is_foreign_driven detection",
+        "new_features": [
+            "is_foreign_driven = directional consistency > 20% (was: abs(net)/daily_value > 5%)",
+            "Consistency = abs(sum(net,60d)) / sum(abs(net),60d) — measures persistent direction",
+            "Old formula classified 108/109 tickers as foreign-driven (abs value is noise)",
+            "New formula: ~60 tickers foreign-driven — only where Asing flow is actually directional",
+        ],
+        "result": "2025 real broker: 59 trades, 33.9% WR, PF 1.88, +Rp 135M, +13.66% return",
+        "star": "TINS: +Rp 54M (+118%) + EMTK: +Rp 32M (+77%) + PTRO: +Rp 39M (+45%)",
+        "trend_exit": "11 trades, all winners, Rp +259M total",
     },
 }
 
@@ -423,6 +443,15 @@ KEY_LEARNINGS = """
 9. USE HEREDOC FOR MULTI-LINE PYTHON IN YAML
    python3 -c "..." with nested quotes causes SyntaxError.
    Always use python3 << 'EOF' ... EOF pattern in GitHub Actions workflows.
+
+16. DIRECTIONAL CONSISTENCY BEATS ABS-RATIO FOR is_foreign_driven DETECTION
+    Discovered Apr 3 2026: old formula abs(net)/daily_value > 5% classified 108/109
+    tickers as foreign-driven. Even random/noise Asing trading passes the abs threshold.
+    New formula: consistency = abs(sum(net,60d)) / sum(abs(net),60d) > 20%.
+    This measures whether foreigners trade with persistent direction (1.0 = always same
+    side, 0.0 = random). Result: PF 1.78→1.88, return 7.3%→13.66%, Sharpe 0.27→0.93.
+    The 18 extra trades came from stocks where the old formula was randomly blocking
+    valid breakouts by requiring FF confirmation on noise-flow stocks.
 
 13. LOKAL AGGREGATE FLOW IS NOISE — USE ASING-ONLY
     Tried (Apr 2026): detect dominant investor type per ticker by comparing
@@ -517,11 +546,15 @@ INTEGRATION & IMPROVEMENT:
   10. Update daily_signals.yml to include live broker scraping each day
   11. Paper trade 1 month → go live
 
+COMPLETED (April 3, 2026):
+  ✅ v7: is_foreign_driven = directional consistency > 20% in signal_combiner.py
+  ✅ 2025 real-broker v7 backtest: 59 trades, 33.9% WR, PF 1.88, +Rp 135M, Sharpe 0.93
+
 COMPLETED (April 2, 2026):
   ✅ Real broker data integrated into backtest via --real-broker flag
   ✅ Self-healing merge step in run_backtest.yml (broker_summary from split files)
   ✅ Self-healing price backfill in run_backtest.yml (PTRO/NIKL from Yahoo Finance)
-  ✅ 2025 real-broker backtest: 41 trades, 34.1% WR, PF 1.78, +Rp 73M
+  ✅ 2025 real-broker v6 backtest: 41 trades, 34.1% WR, PF 1.78, +Rp 73M
   ✅ Dominant investor detection (v3) rejected — Lokal aggregate is noise
 """
 
