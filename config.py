@@ -101,6 +101,8 @@ class EntryConfig:
     entry_timing: str = "next_open"
     signal_confirmation_days: int = 1
     max_gap_down_pct: float = 0.02
+    max_gap_up_pct: float = 0.07   # skip entry if stock gaps up >7% from signal close
+    max_entries_per_week: int = 5  # rolling 10-day entry limit — prevents cluster overtrading
     min_big_money_score: float = 0.0
 
 
@@ -132,7 +134,7 @@ class ExitConfig:
 
     # NEW: Emergency stop — even during hold period, exit if loss exceeds this
     # This prevents catastrophic damage from gap-downs during hold period
-    emergency_stop_pct: float = 0.15  # -15% = something is seriously wrong
+    emergency_stop_pct: float = 0.12  # -12% = something is seriously wrong (tightened from 0.15)
 
     # Trailing stop
     trailing_activation_pct: float = 0.08

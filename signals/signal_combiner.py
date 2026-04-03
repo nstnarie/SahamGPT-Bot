@@ -220,35 +220,29 @@ class SignalCombiner:
 
     def _add_accumulation_signals(self, df, broker_df):
         """
-        Pre-breakout accumulation check (Direction B).
+        Broker accumulation signals for entry and exit.
 
-        Institutions accumulate BEFORE a breakout, not on the day of.
-        On breakout day, early accumulators often take partial profits while
-        the price runs — which makes same-day acc_score negative.
+        Two metrics:
+        1. accumulation_score (count-based) — used for hold extension (v8)
+        2. top_broker_acc (value-weighted, top-5 Asing by activity) — for entry filter
 
-        So instead of checking today's score, we look at the maximum
-        accumulation_score over the 14 days BEFORE today (shift 1 to exclude
-        today, rolling max over 14 days). If it was ever positive in that
-        window → at least one broker was consistently buying in the lead-up.
-
-        pre_breakout_acc > 0 means: in the 2 weeks prior to this breakout,
-        there was at least one 5-day window where accumulators > distributors.
+        For entry: uses top_broker_acc because it captures big money direction.
+        Count-based scores are noise (many small brokers ≠ market direction).
         """
         if broker_df is None or broker_df.empty or "accumulation_score" not in broker_df.columns:
             df["accumulation_score"] = 0
-            df["pre_breakout_acc"] = 0
+            df["top_broker_acc"] = 0
             return df
 
         score = broker_df["accumulation_score"].reindex(df.index, method="ffill").fillna(0)
         df["accumulation_score"] = score
 
-        # Max score over [-15d, -1d] — exclude today, look back up to 14 trading days
-        df["pre_breakout_acc"] = (
-            score.shift(1)
-                 .rolling(14, min_periods=5)
-                 .max()
-                 .fillna(0)
-        )
+        if "top_broker_acc" in broker_df.columns:
+            top_acc = broker_df["top_broker_acc"].reindex(df.index, method="ffill").fillna(0)
+            df["top_broker_acc"] = top_acc
+        else:
+            df["top_broker_acc"] = 0
+
         return df
 
     def _evaluate_signal(self, row):

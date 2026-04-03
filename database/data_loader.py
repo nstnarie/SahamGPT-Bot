@@ -281,7 +281,34 @@ def load_broker_accumulation_df(session: Session, ticker: str,
     distributing = ((active_days >= 3) & (buy_days <= 1))
 
     score = accumulating.sum(axis=1) - distributing.sum(axis=1)
-    return pd.DataFrame({"accumulation_score": score})
+
+    # ── Top-N broker accumulation (value-weighted) ──
+    # For following big money: look at the top 5 Asing brokers by activity
+    # over a 10-day rolling window. Sum their net_value — if positive,
+    # the big players are net buying (accumulating), not the noise of
+    # many small brokers.
+    top_n = 5
+    window = 10
+    filled = pivot.fillna(0)
+    rolling_net = filled.rolling(window, min_periods=3).sum()
+    rolling_abs = filled.abs().rolling(window, min_periods=3).sum()
+
+    top_scores = []
+    for d in rolling_net.index:
+        abs_row = rolling_abs.loc[d]
+        net_row = rolling_net.loc[d]
+        active = abs_row[abs_row > 0]
+        if len(active) == 0:
+            top_scores.append(0.0)
+        else:
+            top_brokers = active.nlargest(min(top_n, len(active))).index
+            top_scores.append(float(net_row[top_brokers].sum()))
+
+    result = pd.DataFrame({
+        "accumulation_score": score,
+        "top_broker_acc": top_scores,
+    }, index=score.index)
+    return result
 
 
 def load_index_df(session: Session, index_code: str = "IHSG",

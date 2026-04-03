@@ -208,9 +208,9 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — v8 backtest complete (2025, PF 1.97, +Rp 145M). Next: 2024 broker data backfill."
+STATUS = "ACTIVE — v9 backtest complete (2025, PF 2.14, +Rp 127M, DD -3.28%). Next: 2024 broker data backfill."
 
-CURRENT_VERSION = "v8"
+CURRENT_VERSION = "v9"
 
 LATEST_BACKTEST_RESULTS = {
     "2025_synthetic": {
@@ -234,10 +234,17 @@ LATEST_BACKTEST_RESULTS = {
     "2025_real_broker_v8": {
         "trades": 60, "win_rate": "36.7%", "pnl": "Rp +145M", "pf": 1.97,
         "total_return": "14.63%", "max_drawdown": "-4.11%",
-        "sharpe": 1.01, "sortino": 1.79, "calmar": 3.71, "exposure": "71.2%",
-        "note": "CURRENT BASELINE. Hold extension: skip stop days 6-10 if acc_score > 0.",
-        "star_trade": "TINS: +Rp 54M (+118%) + PTRO: +Rp 39M (+45%) + EMTK: +Rp 32M (+77%)",
-        "trend_exit": "11 trades, all winners, Rp +261M total",
+        "sharpe": 1.01, "sortino": 1.79, "calmar": 3.71,
+        "note": "SUPERSEDED by v9.",
+    },
+    "2025_real_broker_v9": {
+        "trades": 45, "win_rate": "37.8%", "pnl": "Rp +127M", "pf": 2.14,
+        "total_return": "12.74%", "max_drawdown": "-3.28%",
+        "sharpe": 0.89, "sortino": 1.54, "calmar": 4.16, "exposure": "70.4%",
+        "note": "CURRENT BASELINE. 4 fixes: indicator warmup, gap-up filter, "
+                "emergency stop -12%, cluster limit 5/10d.",
+        "star_trade": "TINS: +Rp 54M (+118%) + PTRO: +Rp 38M (+45%) + EMTK: +Rp 32M (+77%)",
+        "trend_exit": "8 trades, Rp +210M total",
     },
     "2024": {
         "trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68,
@@ -271,12 +278,12 @@ IN_PROGRESS = """
 4. TICKER UNIVERSE ✅ (as of 2026-03-28)
    - 109 unique tickers (added PTRO, NIKL; removed 8 duplicates)
 
-5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v8)
-   - 2025 full year with real Asing flow: 60 trades, 36.7% WR, PF 1.97, +Rp 145M
-   - v7 change: is_foreign_driven = directional consistency > 20%
-   - v8 change: hold extension in portfolio.py — skip stop days 6-10 if acc_score > 0
+5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v9)
+   - 2025 full year with real Asing flow: 45 trades, 37.8% WR, PF 2.14, +Rp 127M
+   - v7: is_foreign_driven = directional consistency > 20%
+   - v8: hold extension — skip stop days 6-10 if acc_score > 0
+   - v9: indicator warmup + gap-up filter + emergency stop -12% + cluster limit 5/10d
    - Integration confirmed working: --real-broker flag in run_backtest.yml
-   - Self-healing merge step ensures broker_summary always has 1,043,576 records
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -390,6 +397,18 @@ VERSION_HISTORY = {
         ],
         "result": "2025 real broker: 59 trades, 33.9% WR, PF 1.88, +Rp 135M. SUPERSEDED by v8.",
     },
+    "v9": {
+        "signal": "v8 + 4 structural fixes",
+        "new_features": [
+            "Indicator warmup: load prices from 5 months before backtest start (fixes blind first 3 months)",
+            "Gap-up entry filter: skip if stock opens >7% above signal day close (EMTK Oct 2 fix)",
+            "Emergency stop: -15% → -12% (ESSA/EMTK losses reduced)",
+            "Cluster limit: max 5 entries per rolling 10 trading days (May 2025 fix: 13→5 entries)",
+        ],
+        "result": "2025 real broker: 45 trades, 37.8% WR, PF 2.14, +Rp 127M, DD -3.28%, Calmar 4.16",
+        "tradeoff": "Fewer trades (-15) but higher quality. PF +0.17, DD tighter, Calmar improved.",
+        "star": "TINS: +Rp 54M (+118%) + PTRO: +Rp 38M (+45%) + EMTK: +Rp 32M (+77%)",
+    },
     "v8": {
         "signal": "v7 + broker accumulation hold extension",
         "new_features": [
@@ -463,6 +482,23 @@ KEY_LEARNINGS = """
 9. USE HEREDOC FOR MULTI-LINE PYTHON IN YAML
    python3 -c "..." with nested quotes causes SyntaxError.
    Always use python3 << 'EOF' ... EOF pattern in GitHub Actions workflows.
+
+18. INDICATOR WARMUP IS CRITICAL FOR EARLY BACKTEST PERIOD
+    Discovered Apr 3 2026: loading prices from backtest start_date means the first
+    ~60 trading days (~3 months) have no valid 60-day high or MA50. Stocks like BBTN
+    (770→1280 rally starting Mar 25 2025) were entirely invisible. Fix: load prices
+    from 5 months before start_date. Trading still begins at start_date. Pure bug fix.
+
+19. ENTRY-DAY GAP-UP IS A REJECTION RISK
+    Discovered Apr 3 2026: EMTK Oct 2 2025 — signal fired on Oct 1 (clean candle,
+    close at high). Entry next day opened +5.4% gap-up at 1650, spike to 1700, then
+    collapsed. Entered at top of rejection candle → emergency stopped -16%, -Rp 10M.
+    Fix: skip entry if open > 7% above prior close. Already had gap-DOWN filter.
+
+20. SIGNAL CLUSTERING = FAKE BREAKOUT WEEK
+    Discovered Apr 3 2026: May 2025 had 13 entries in 8 days, 11 of 13 were losers
+    (-Rp 9M total). Many stocks breaking out simultaneously often means broad market
+    euphoria, not stock-specific setups. Fix: max 5 entries per rolling 10 trading days.
 
 17. BROKER ACCUMULATION SCORE WORKS AS HOLD SIGNAL, NOT ENTRY FILTER
     Discovered Apr 3 2026: count-based acc_score (accumulators - distributors) fails
@@ -576,6 +612,8 @@ INTEGRATION & IMPROVEMENT:
   11. Paper trade 1 month → go live
 
 COMPLETED (April 3, 2026):
+  ✅ v9: 4 structural fixes (warmup, gap-up filter, emergency -12%, cluster limit)
+  ✅ 2025 real-broker v9: 45 trades, 37.8% WR, PF 2.14, +Rp 127M, Calmar 4.16
   ✅ v8: hold extension in portfolio.py (acc_score > 0 on days 6-10 → skip stop)
   ✅ load_broker_accumulation_df() added to data_loader.py
   ✅ 2025 real-broker v8 backtest: 60 trades, 36.7% WR, PF 1.97, +Rp 145M, Sharpe 1.01

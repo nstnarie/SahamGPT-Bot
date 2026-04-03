@@ -127,13 +127,20 @@ def main():
     start_dt = pd.Timestamp(args.start).date()
     end_dt = pd.Timestamp(args.end).date()
 
+    # Load prices from 5 months before start for indicator warmup.
+    # The 60-day breakout and MA50 need ~60+ trading days of history before
+    # they produce valid values. Without this, the first ~3 months of a
+    # backtest period are blind (e.g. BBTN's entire Mar-Apr 2025 rally was missed
+    # because 60d high was NaN). Trading still only starts from start_dt.
+    warmup_start = (pd.Timestamp(args.start) - pd.DateOffset(months=5)).date()
+
     universe_prices: Dict[str, pd.DataFrame] = {}
     foreign_flows: Dict[str, pd.DataFrame] = {}
     broker_accumulations: Dict[str, pd.DataFrame] = {}
     stock_sectors: Dict[str, str] = {}
 
     for ticker in good_tickers:
-        pdf = load_prices_as_dataframe(session, ticker, start_dt, end_dt)
+        pdf = load_prices_as_dataframe(session, ticker, warmup_start, end_dt)
         if not pdf.empty:
             universe_prices[ticker] = pdf
         if args.real_broker:

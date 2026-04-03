@@ -87,6 +87,7 @@ class BacktestEngine:
         completed_trades: List[Trade] = []
         pending_entries: Dict[str, float] = {}
         cooldown_until: Dict[str, object] = {}
+        recent_entry_dates: List[object] = []  # rolling window for cluster limit
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -105,6 +106,17 @@ class BacktestEngine:
                 max_entries = self.config.exit.max_entries_per_day
                 entries_today = 0
 
+                # Rolling 10-day cluster limit: prevent overtrading during fake breakout weeks
+                # If >= max_entries_per_week entries were made in the last 10 trading days, pause
+                lookback = 10
+                recent_cutoff_idx = max(0, i - lookback)
+                recent_cutoff_date = trading_dates[recent_cutoff_idx]
+                recent_count = sum(1 for d in recent_entry_dates if d >= recent_cutoff_date)
+                max_week = self.config.entry.max_entries_per_week
+                if recent_count >= max_week:
+                    pending_entries.clear()
+                    continue
+
                 for ticker, signal_score in sorted_entries:
                     if entries_today >= max_entries:
                         break
@@ -117,7 +129,7 @@ class BacktestEngine:
                         row = current_data[ticker]
                         open_price = row.get("open", row["close"])
 
-                        # Gap-down filter
+                        # Gap filter (down and up)
                         if i > 0:
                             prev_date = trading_dates[i - 1]
                             ticker_df = universe_prices.get(ticker)
@@ -126,6 +138,11 @@ class BacktestEngine:
                                 if prev_close > 0:
                                     gap_pct = (open_price - prev_close) / prev_close
                                     if gap_pct < -self.config.entry.max_gap_down_pct:
+                                        continue
+                                    # Gap-up rejection: stock gapped up >7% at open
+                                    # means we're entering at euphoric prices after
+                                    # signal fired — high rejection risk (e.g. EMTK Oct 2)
+                                    if gap_pct > self.config.entry.max_gap_up_pct:
                                         continue
 
                         sig_df = all_signals.get(ticker)
@@ -168,6 +185,7 @@ class BacktestEngine:
                                 portfolio.positions[ticker] = pos
                                 portfolio.cash -= buy["total_cost"]
                                 entries_today += 1
+                                recent_entry_dates.append(current_date)
 
                 pending_entries.clear()
 
