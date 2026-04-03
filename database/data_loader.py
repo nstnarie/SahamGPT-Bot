@@ -225,6 +225,65 @@ def load_broker_summary_as_ff_df(session: Session, ticker: str,
     return result
 
 
+def load_broker_accumulation_df(session: Session, ticker: str,
+                                  start_date: Optional[date] = None,
+                                  end_date: Optional[date] = None) -> pd.DataFrame:
+    """
+    Compute per-broker accumulation/distribution score for a ticker.
+
+    For each date D, looks at each Asing broker's activity over the prior 5 days:
+      - Accumulating: traded on 3+ days AND was net buyer on 4+ of those days
+      - Distributing: traded on 3+ days AND was net buyer on <=1 of those days
+
+    Returns DataFrame indexed by date with 'accumulation_score' column:
+      score = count(accumulating brokers) - count(distributing brokers)
+      Positive = more brokers accumulating than distributing.
+      Negative = more brokers distributing (potential exit signal).
+      Zero     = neutral / no persistent directional activity.
+    """
+    q = (
+        session.query(BrokerSummary)
+        .filter(
+            BrokerSummary.ticker == ticker,
+            BrokerSummary.broker_type == "Asing",
+        )
+    )
+    if start_date:
+        q = q.filter(BrokerSummary.date >= start_date)
+    if end_date:
+        q = q.filter(BrokerSummary.date <= end_date)
+    q = q.order_by(BrokerSummary.date)
+
+    rows = q.all()
+    if not rows:
+        return pd.DataFrame()
+
+    data = [{"date": r.date, "broker_code": r.broker_code, "net_value": r.net_value or 0.0}
+            for r in rows]
+    df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])
+
+    # Pivot: rows=date, columns=broker_code, values=net_value (NaN = did not trade)
+    pivot = df.pivot_table(index="date", columns="broker_code",
+                           values="net_value", aggfunc="sum")
+
+    # Per broker: 1 if net buyer that day, 0 if net seller, NaN if no trade
+    is_buy = (pivot > 0).astype(float).where(pivot.notna())
+    is_active = pivot.notna().astype(float)
+
+    # Rolling 5-day sums per broker
+    buy_days = is_buy.rolling(5, min_periods=1).sum()
+    active_days = is_active.rolling(5, min_periods=1).sum()
+
+    # Accumulating: active 3+ days AND net buyer 4+ days
+    accumulating = ((active_days >= 3) & (buy_days >= 4))
+    # Distributing: active 3+ days AND net buyer <=1 day (net seller 4+ days)
+    distributing = ((active_days >= 3) & (buy_days <= 1))
+
+    score = accumulating.sum(axis=1) - distributing.sum(axis=1)
+    return pd.DataFrame({"accumulation_score": score})
+
+
 def load_index_df(session: Session, index_code: str = "IHSG",
                    start_date: Optional[date] = None,
                    end_date: Optional[date] = None) -> pd.DataFrame:

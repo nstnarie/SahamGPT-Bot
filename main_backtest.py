@@ -25,6 +25,7 @@ from database.schema import create_all_tables, get_session, get_engine, Stock
 from database.data_loader import (
     load_prices_as_dataframe, load_index_df,
     load_foreign_flow_df, load_broker_summary_as_ff_df,
+    load_broker_accumulation_df,
     data_quality_check,
 )
 from scraper.price_scraper import PriceScraper, LQ45_TICKERS
@@ -128,6 +129,7 @@ def main():
 
     universe_prices: Dict[str, pd.DataFrame] = {}
     foreign_flows: Dict[str, pd.DataFrame] = {}
+    broker_accumulations: Dict[str, pd.DataFrame] = {}
     stock_sectors: Dict[str, str] = {}
 
     for ticker in good_tickers:
@@ -138,6 +140,9 @@ def main():
             ff = load_broker_summary_as_ff_df(session, ticker, start_dt, end_dt)
             if ff.empty:
                 ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
+            acc = load_broker_accumulation_df(session, ticker, start_dt, end_dt)
+            if not acc.empty:
+                broker_accumulations[ticker] = acc
         else:
             ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
         if not ff.empty:
@@ -161,6 +166,7 @@ def main():
         universe_prices=universe_prices,
         ihsg_df=ihsg_df,
         foreign_flows=foreign_flows,
+        broker_data=broker_accumulations,
         stock_sectors=stock_sectors,
     )
 

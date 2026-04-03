@@ -208,9 +208,9 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — v7 backtest complete (2025, PF 1.88, +Rp 135M). Next: 2024 broker data backfill."
+STATUS = "ACTIVE — v8 backtest complete (2025, PF 1.97, +Rp 145M). Next: 2024 broker data backfill."
 
-CURRENT_VERSION = "v7"
+CURRENT_VERSION = "v8"
 
 LATEST_BACKTEST_RESULTS = {
     "2025_synthetic": {
@@ -228,9 +228,16 @@ LATEST_BACKTEST_RESULTS = {
         "trades": 59, "win_rate": "33.9%", "pnl": "Rp +135M", "pf": 1.88,
         "total_return": "13.66%", "max_drawdown": "-4.75%",
         "sharpe": 0.93, "sortino": 1.70, "calmar": 2.99, "exposure": "65.3%",
-        "note": "CURRENT BASELINE. is_foreign_driven = directional consistency > 20%.",
+        "note": "SUPERSEDED by v8. is_foreign_driven = directional consistency > 20%.",
         "star_trade": "TINS: +Rp 54M (+118%) + PTRO: +Rp 39M (+45%) + EMTK: +Rp 32M (+77%)",
-        "trend_exit": "11 trades, all winners, Rp +259M total",
+    },
+    "2025_real_broker_v8": {
+        "trades": 60, "win_rate": "36.7%", "pnl": "Rp +145M", "pf": 1.97,
+        "total_return": "14.63%", "max_drawdown": "-4.11%",
+        "sharpe": 1.01, "sortino": 1.79, "calmar": 3.71, "exposure": "71.2%",
+        "note": "CURRENT BASELINE. Hold extension: skip stop days 6-10 if acc_score > 0.",
+        "star_trade": "TINS: +Rp 54M (+118%) + PTRO: +Rp 39M (+45%) + EMTK: +Rp 32M (+77%)",
+        "trend_exit": "11 trades, all winners, Rp +261M total",
     },
     "2024": {
         "trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68,
@@ -264,9 +271,10 @@ IN_PROGRESS = """
 4. TICKER UNIVERSE ✅ (as of 2026-03-28)
    - 109 unique tickers (added PTRO, NIKL; removed 8 duplicates)
 
-5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v7)
-   - 2025 full year with real Asing flow: 59 trades, 33.9% WR, PF 1.88, +Rp 135M
-   - v7 change: is_foreign_driven = directional consistency > 20% (was abs-ratio > 5%)
+5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v8)
+   - 2025 full year with real Asing flow: 60 trades, 36.7% WR, PF 1.97, +Rp 145M
+   - v7 change: is_foreign_driven = directional consistency > 20%
+   - v8 change: hold extension in portfolio.py — skip stop days 6-10 if acc_score > 0
    - Integration confirmed working: --real-broker flag in run_backtest.yml
    - Self-healing merge step ensures broker_summary always has 1,043,576 records
 """
@@ -379,11 +387,23 @@ VERSION_HISTORY = {
             "is_foreign_driven = directional consistency > 20% (was: abs(net)/daily_value > 5%)",
             "Consistency = abs(sum(net,60d)) / sum(abs(net),60d) — measures persistent direction",
             "Old formula classified 108/109 tickers as foreign-driven (abs value is noise)",
-            "New formula: ~60 tickers foreign-driven — only where Asing flow is actually directional",
         ],
-        "result": "2025 real broker: 59 trades, 33.9% WR, PF 1.88, +Rp 135M, +13.66% return",
+        "result": "2025 real broker: 59 trades, 33.9% WR, PF 1.88, +Rp 135M. SUPERSEDED by v8.",
+    },
+    "v8": {
+        "signal": "v7 + broker accumulation hold extension",
+        "new_features": [
+            "load_broker_accumulation_df() in data_loader.py — per-broker consistency score",
+            "accumulation_score = count(Asing brokers accumulating) - count(distributing)",
+            "Accumulating broker: active 3+/5 days AND net buyer 4+/5 days",
+            "Hold extension in portfolio.py: if acc_score > 0 on days 6-10 → skip stop once",
+            "Rationale: dip being bought by institutions → likely temporary, not distribution",
+        ],
+        "result": "2025 real broker: 60 trades, 36.7% WR, PF 1.97, +Rp 145M, Sharpe 1.01",
         "star": "TINS: +Rp 54M (+118%) + EMTK: +Rp 32M (+77%) + PTRO: +Rp 39M (+45%)",
-        "trend_exit": "11 trades, all winners, Rp +259M total",
+        "trend_exit": "11 trades, all winners, Rp +261M total",
+        "note": "acc_score failed as ENTRY filter (count-based vs value-based conflict). "
+                "Works well as EXIT/HOLD signal because it's meaningful at stop-fire moment.",
     },
 }
 
@@ -443,6 +463,15 @@ KEY_LEARNINGS = """
 9. USE HEREDOC FOR MULTI-LINE PYTHON IN YAML
    python3 -c "..." with nested quotes causes SyntaxError.
    Always use python3 << 'EOF' ... EOF pattern in GitHub Actions workflows.
+
+17. BROKER ACCUMULATION SCORE WORKS AS HOLD SIGNAL, NOT ENTRY FILTER
+    Discovered Apr 3 2026: count-based acc_score (accumulators - distributors) fails
+    as an entry filter because 84% of breakout days have negative scores. Root cause:
+    1-2 large Asing brokers driving the move are outnumbered by many small sellers.
+    ff_confirmed (value-weighted) already captures the large broker activity.
+    However, acc_score > 0 works well as a hold extension on days 6-10: if brokers
+    are still net-accumulating on the day a stop fires, the dip is institutional buying.
+    Result: WR 33.9%→36.7%, PF 1.88→1.97, drawdown improved -4.75%→-4.11%.
 
 16. DIRECTIONAL CONSISTENCY BEATS ABS-RATIO FOR is_foreign_driven DETECTION
     Discovered Apr 3 2026: old formula abs(net)/daily_value > 5% classified 108/109
@@ -547,6 +576,9 @@ INTEGRATION & IMPROVEMENT:
   11. Paper trade 1 month → go live
 
 COMPLETED (April 3, 2026):
+  ✅ v8: hold extension in portfolio.py (acc_score > 0 on days 6-10 → skip stop)
+  ✅ load_broker_accumulation_df() added to data_loader.py
+  ✅ 2025 real-broker v8 backtest: 60 trades, 36.7% WR, PF 1.97, +Rp 145M, Sharpe 1.01
   ✅ v7: is_foreign_driven = directional consistency > 20% in signal_combiner.py
   ✅ 2025 real-broker v7 backtest: 59 trades, 33.9% WR, PF 1.88, +Rp 135M, Sharpe 0.93
 

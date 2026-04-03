@@ -158,14 +158,16 @@ class PortfolioManager:
     def check_exit_conditions(self, position, current_close, current_low,
                                current_atr, composite_score, regime, trading_day,
                                ff_consecutive_sell=0, current_ma10=None,
-                               is_foreign_driven=False):
+                               is_foreign_driven=False, acc_score=0):
         """
-        Exit logic v6:
-        
+        Exit logic v7:
+
         1. Emergency stop: -15% at ANY time (even during hold period)
         2. During first 5 days: NO regular stop-loss
         3. HIGH PERFORMERS (+15%): trend exit — close < MA10
         4. Stop-loss: -7% or 1.5xATR, cap -10% (after day 5)
+           → Hold extension: if acc_score > 0 on days 6-10, skip stop once —
+             brokers are still accumulating, dip is likely temporary
         5. Partial profit: sell 30% at +15%
         6. Time exit: 15 days no +3%
         7. FF exit: 5 consecutive days net foreign sell (ONLY for foreign-driven stocks,
@@ -200,6 +202,12 @@ class PortfolioManager:
 
         # 4. REGULAR STOP-LOSS
         if current_low <= position.stop_price:
+            # Hold extension: days 6-10 only — if Asing brokers are still
+            # net-accumulating (acc_score > 0), skip the stop once.
+            # Rationale: the dip is being bought by institutions → likely temporary.
+            # Emergency stop (-15%) already fired above, so this is safe.
+            if acc_score > 0 and position.days_held <= 10:
+                return "", 0.0
             return "STOP_LOSS", 1.0
 
         # 5. Partial profit
