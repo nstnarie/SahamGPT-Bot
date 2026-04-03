@@ -265,9 +265,10 @@ IN_PROGRESS = """
    - Split files updated: 242,321 + 801,255 = 1,043,576 ✅
    - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
-2. 2024 BROKER DATA — NOT STARTED ❌
-   - 2025 real-broker backtest confirmed improvement (PF 1.37→1.78)
-   - 2024 backfill is now the next priority
+2. 2024 BROKER DATA — IN PROGRESS 🔄
+   - Q1 batch 1 (2024-01-01 to 2024-03-01, tickers 1–25): RUNNING (GH run 23958438367, Apr 4 2026)
+   - Remaining: batch 2→3→batch4-split for Q1, then Q2→Q3→Q4 sequentially
+   - After each quarter: export_summary.yml → update_split_files.yml
 
 3. PRICE DATA ✅
    - initial_scrape.yml run on 2026-03-28
@@ -591,7 +592,7 @@ WEAK_SPOTS = """
 NEXT_STEPS = """
 IMMEDIATE — NEXT UP:
   Backfill 2024 full year broker data. Refresh Stockbit token before each session.
-  1. Q1 2024: batches 1→2→3, then batch 4 split: Jan 1–Feb 15, Feb 15–Mar 31
+  1. Q1 2024: ✅ batch 1 triggered (2024-01-01→2024-03-01) | batch 2→3→batch4-split pending
   2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
   3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
   4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
@@ -610,6 +611,11 @@ INTEGRATION & IMPROVEMENT:
      Use broker accumulation signal to decide hold vs exit
   10. Update daily_signals.yml to include live broker scraping each day
   11. Paper trade 1 month → go live
+
+COMPLETED (April 4, 2026):
+  ✅ v9 GitHub Actions re-run confirmed — identical results (run 23958174058)
+  ✅ 2024 Q1 broker scrape batch 1 triggered (run 23958438367, 2024-01-01→2024-03-01)
+  ✅ Trade log downloaded locally: reports/latest/trade_log.csv
 
 COMPLETED (April 3, 2026):
   ✅ v9: 4 structural fixes (warmup, gap-up filter, emergency -12%, cluster limit)
