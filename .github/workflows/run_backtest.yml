@@ -249,7 +249,7 @@ jobs:
 
       - name: Save database
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         with:
           name: idx-database
           path: idx_swing_trader.db
