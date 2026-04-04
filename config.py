@@ -134,7 +134,7 @@ class ExitConfig:
 
     # NEW: Emergency stop — even during hold period, exit if loss exceeds this
     # This prevents catastrophic damage from gap-downs during hold period
-    emergency_stop_pct: float = 0.10  # -10% = something is seriously wrong (tightened from 0.12)
+    emergency_stop_pct: float = 0.12  # -12% = something is seriously wrong (tightened from 0.15)
 
     # Trailing stop
     trailing_activation_pct: float = 0.08
