@@ -253,6 +253,27 @@ LATEST_BACKTEST_RESULTS = {
 }
 
 # ══════════════════════════════════════════════════════════════
+# v10 EXPERIMENT LOG (feature/v10-experiments branch)
+# ══════════════════════════════════════════════════════════════
+
+V10_EXPERIMENTS = {
+    "exp1_emergency_stop_10pct": {
+        "hypothesis": "Tighter emergency stop (-10% vs -12%) reduces worst losses without killing winners.",
+        "change": "config.py emergency_stop_pct: 0.12 → 0.10",
+        "result": {
+            "trades": 45, "win_rate": "37.8%", "pnl": "Rp +111M", "pf": 1.88,
+            "total_return": "11.08%", "max_drawdown": "-3.81%",
+            "sharpe": 0.70, "sortino": 1.20, "calmar": 3.11, "exposure": "70.4%",
+        },
+        "vs_baseline": "PF 2.14→1.88, return -Rp 16M, DD worse (-3.28%→-3.81%), Calmar 4.16→3.11.",
+        "verdict": "REJECTED. -10% stop clips winners that dip temporarily during the 5-day hold. "
+                   "-12% is correctly calibrated. Reverted.",
+        "run_id": "23982773904",
+        "date": "2026-04-04",
+    },
+}
+
+# ══════════════════════════════════════════════════════════════
 # WHAT'S IN PROGRESS RIGHT NOW (as of 2026-04-01)
 # ══════════════════════════════════════════════════════════════
 

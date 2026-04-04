@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 4, 2026 (v12 — 2024 backfill started, feature/v10-experiments branch created)
+> Last updated: April 4, 2026 (v12 — 2024 backfill started, feature/v10-experiments branch created, Exp 1 rejected)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -52,6 +52,13 @@ TREND_EXIT: 8 trades, Rp +210M total
 - Both touch `idx-database` artifact; `run_backtest.yml` uploads `if: always()` with `overwrite: true`
 - Race condition: last workflow to finish overwrites the other's data
 - Decision: backtest first → completed → then scraper triggered
+
+### Experiment 1 — REJECTED (emergency stop -12% → -10%)
+- Run ID: 23982773904 — `feature/v10-experiments`, `2025-01-01 to 2025-12-31`, `--real-broker`
+- Result: 45 trades | 37.8% WR | PF **1.88** | +Rp 111M | DD -3.81% | Calmar 3.11
+- vs v9: PF -0.26, return -Rp 16M, DD worse, Calmar -1.05 — all metrics declined
+- Learning: -10% stop clips winners that dip temporarily during the 5-day hold period. -12% is correctly calibrated.
+- Config reverted to `emergency_stop_pct=0.12` on the feature branch.
 
 ### feature/v10-experiments branch — CREATED
 - Branch pushed to `origin/feature/v10-experiments`
@@ -163,7 +170,7 @@ v9 baseline to beat: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Cal
 
 | # | Experiment | File(s) to change | Hypothesis |
 |---|------------|-------------------|------------|
-| 1 | Emergency stop -12% → -10% | `config.py:137` | Tighter stop reduces worst losses without killing winners. Expect fewer large losses, possibly fewer trades. |
+| ~~1~~ | ~~Emergency stop -12% → -10%~~ | ~~`config.py:137`~~ | **REJECTED (2026-04-04, run 23982773904).** PF 2.14→1.88, return -Rp 16M, DD worse. -10% clips recovering winners. -12% stays. |
 | 2 | IHSG market filter (close > MA20, daily > -1%) | `signals/market_regime.py`, `signals/signal_combiner.py` | Skip entries on days IHSG is below its 20MA or just crashed >1%. Expect fewer trades, potentially higher WR. |
 | 3 | FF magnitude: require 5-day sum > 1.5x 20-day avg absolute flow | `signals/signal_combiner.py:_add_foreign_flow_signals()` | Requiring abnormally strong FF (not just any positive flow) improves signal quality for foreign-driven stocks. |
 | 4a | Support/resistance detection + break-below exit | `signals/signal_combiner.py`, `backtest/portfolio.py` | Historical price clusters identify structural support. Breaking below → stronger exit signal than time/stop. |
