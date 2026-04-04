@@ -53,9 +53,14 @@ class SignalCombiner:
         if not regime_df.empty:
             result["regime"] = regime_df["regime"].reindex(result.index, method="ffill")
             result["exposure_mult"] = regime_df["exposure_mult"].reindex(result.index, method="ffill")
+            if "ihsg_entry_ok" in regime_df.columns:
+                result["ihsg_entry_ok"] = regime_df["ihsg_entry_ok"].reindex(result.index, method="ffill").fillna(True)
+            else:
+                result["ihsg_entry_ok"] = True
         else:
             result["regime"] = "SIDEWAYS"
             result["exposure_mult"] = 0.5
+            result["ihsg_entry_ok"] = True
 
         result["regime"] = result["regime"].fillna("SIDEWAYS")
         result["exposure_mult"] = result["exposure_mult"].fillna(0.5)
@@ -260,6 +265,10 @@ class SignalCombiner:
             return "SELL"
 
         if exposure > 0:
+            # Exp 2: skip entries on days IHSG is below MA20 or dropped >1%
+            if not row.get("ihsg_entry_ok", True):
+                return "HOLD"
+
             is_breakout = row.get("is_breakout", False)
             ff_confirmed = row.get("ff_confirmed", False)
             rsi = row.get("rsi", 50)

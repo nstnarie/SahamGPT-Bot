@@ -67,6 +67,12 @@ class MarketRegimeFilter:
         # Map exposure multiplier
         df["exposure_mult"] = df["regime"].map(self.cfg.exposure_multiplier)
 
+        # Exp 2: IHSG entry filter — skip entries when IHSG is below MA20 or crashed >1% today
+        df["ma_20"] = df["close"].rolling(20, min_periods=10).mean()
+        df["ihsg_above_ma20"] = df["close"] > df["ma_20"]
+        df["ihsg_daily_return"] = df["close"].pct_change()
+        df["ihsg_entry_ok"] = df["ihsg_above_ma20"] & (df["ihsg_daily_return"] > -0.01)
+
         logger.info(
             f"Regime computed: "
             f"BULL={( df['regime']=='BULL').sum()} days, "
