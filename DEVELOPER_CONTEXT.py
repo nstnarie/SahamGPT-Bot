@@ -257,6 +257,21 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp3_ff_magnitude_filter": {
+        "hypothesis": "Require 5-day FF sum > 1.5x 20-day avg absolute flow. Only enter on abnormally strong accumulation.",
+        "change": "signal_combiner.py: added ff_magnitude_ok as third condition in ff_full_confirm.",
+        "result": {
+            "trades": 43, "win_rate": "39.5%", "pnl": "Rp +134M", "pf": 2.25,
+            "total_return": "13.36%", "max_drawdown": "-3.39%",
+            "sharpe": 0.96, "sortino": 1.59, "calmar": 4.17, "exposure": "69.4%",
+        },
+        "vs_baseline": "vs Exp 2 baseline (42t, 40.5% WR, PF 2.33, +Rp 137M, Calmar 4.32): "
+                       "all metrics declined. PF -0.08, WR -1pp, return -Rp 3M, Sharpe -0.06.",
+        "verdict": "REJECTED. Existing count+trend checks already capture quality adequately. "
+                   "Magnitude multiplier adds noise without benefit on 2025 dataset. Reverted.",
+        "run_id": "23982978951",
+        "date": "2026-04-04",
+    },
     "exp2_ihsg_market_filter": {
         "hypothesis": "Skip entries on days IHSG close < MA20 or daily return < -1%. Expect fewer trades, higher WR.",
         "change": "market_regime.py: add ihsg_entry_ok column. signal_combiner.py: gate BUY on ihsg_entry_ok.",
