@@ -257,6 +257,21 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp2_ihsg_market_filter": {
+        "hypothesis": "Skip entries on days IHSG close < MA20 or daily return < -1%. Expect fewer trades, higher WR.",
+        "change": "market_regime.py: add ihsg_entry_ok column. signal_combiner.py: gate BUY on ihsg_entry_ok.",
+        "result": {
+            "trades": 42, "win_rate": "40.5%", "pnl": "Rp +137M", "pf": 2.33,
+            "total_return": "13.73%", "max_drawdown": "-3.39%",
+            "sharpe": 1.02, "sortino": 1.76, "calmar": 4.32, "exposure": "69.7%",
+        },
+        "vs_baseline": "PF 2.14→2.33, WR +2.7pp, return +Rp 10M, Sharpe 0.89→1.02, Calmar 4.16→4.32. "
+                       "DD marginally worse (-3.28%→-3.39%, noise). Trades 45→42.",
+        "verdict": "ACCEPTED. All key metrics improved. Filter removes losing entries on weak IHSG days. "
+                   "This is the new v10 baseline.",
+        "run_id": "23982879523",
+        "date": "2026-04-04",
+    },
     "exp1_emergency_stop_10pct": {
         "hypothesis": "Tighter emergency stop (-10% vs -12%) reduces worst losses without killing winners.",
         "change": "config.py emergency_stop_pct: 0.12 → 0.10",

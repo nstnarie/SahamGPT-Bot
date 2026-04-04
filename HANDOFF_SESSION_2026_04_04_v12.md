@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 4, 2026 (v12 — 2024 backfill started, feature/v10-experiments branch created, Exp 1 rejected)
+> Last updated: April 4, 2026 (v12 — 2024 backfill started, Exp 1 rejected, Exp 2 accepted → new baseline)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -52,6 +52,14 @@ TREND_EXIT: 8 trades, Rp +210M total
 - Both touch `idx-database` artifact; `run_backtest.yml` uploads `if: always()` with `overwrite: true`
 - Race condition: last workflow to finish overwrites the other's data
 - Decision: backtest first → completed → then scraper triggered
+
+### Experiment 2 — ACCEPTED (IHSG market filter)
+- Run ID: 23982879523 — `feature/v10-experiments`, `2025-01-01 to 2025-12-31`, `--real-broker`
+- Result: 42 trades | 40.5% WR | PF **2.33** | +Rp 137M | DD -3.39% | Calmar 4.32 | Sharpe 1.02
+- vs v9: PF +0.19, WR +2.7pp, return +Rp 10M, Sharpe +0.13, Calmar +0.16. Trades 45→42.
+- DD marginally worse (-3.28%→-3.39%) — noise level, not a concern.
+- Code: `market_regime.py` computes `ihsg_entry_ok`; `signal_combiner.py` gates BUY on it.
+- **This is the new feature-branch baseline.**
 
 ### Experiment 1 — REJECTED (emergency stop -12% → -10%)
 - Run ID: 23982773904 — `feature/v10-experiments`, `2025-01-01 to 2025-12-31`, `--real-broker`
@@ -166,12 +174,13 @@ After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
 ⚠️ **Do NOT merge to main and do NOT trigger backtest from main while the 2024 broker scraper is running.**
 ⚠️ **One experiment per session. Backtest → compare vs v9 baseline → accept/reject → document → next.**
 
-v9 baseline to beat: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
+v9 baseline: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
+**Current baseline (post Exp 2): 42 trades | 40.5% WR | PF 2.33 | +Rp 137M | DD -3.39% | Calmar 4.32**
 
 | # | Experiment | File(s) to change | Hypothesis |
 |---|------------|-------------------|------------|
 | ~~1~~ | ~~Emergency stop -12% → -10%~~ | ~~`config.py:137`~~ | **REJECTED (2026-04-04, run 23982773904).** PF 2.14→1.88, return -Rp 16M, DD worse. -10% clips recovering winners. -12% stays. |
-| 2 | IHSG market filter (close > MA20, daily > -1%) | `signals/market_regime.py`, `signals/signal_combiner.py` | Skip entries on days IHSG is below its 20MA or just crashed >1%. Expect fewer trades, potentially higher WR. |
+| ~~2~~ | ~~IHSG market filter (close > MA20, daily > -1%)~~ | ~~`signals/market_regime.py`, `signals/signal_combiner.py`~~ | **ACCEPTED (2026-04-04, run 23982879523).** PF 2.14→2.33, WR +2.7pp, return +Rp 10M, Sharpe 0.89→1.02. New baseline. |
 | 3 | FF magnitude: require 5-day sum > 1.5x 20-day avg absolute flow | `signals/signal_combiner.py:_add_foreign_flow_signals()` | Requiring abnormally strong FF (not just any positive flow) improves signal quality for foreign-driven stocks. |
 | 4a | Support/resistance detection + break-below exit | `signals/signal_combiner.py`, `backtest/portfolio.py` | Historical price clusters identify structural support. Breaking below → stronger exit signal than time/stop. |
 | 4b | Averaging up on resistance break | `backtest/engine.py`, `backtest/portfolio.py` | If stock breaks next resistance level while held, add to position. Only attempt after 4a shows useful S/R levels. |
