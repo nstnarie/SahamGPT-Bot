@@ -590,32 +590,60 @@ WEAK_SPOTS = """
 # ══════════════════════════════════════════════════════════════
 
 NEXT_STEPS = """
-IMMEDIATE — NEXT UP:
-  Backfill 2024 full year broker data. Refresh Stockbit token before each session.
-  1. Q1 2024: ✅ batch 1 triggered (2024-01-01→2024-03-01) | batch 2→3→batch4-split pending
-  2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
-  3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
-  4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
-  After each quarter: export_summary.yml → update_split_files.yml
+⚠️ BRANCH ISOLATION RULE (active while 2024 broker scraper is running):
+  All code experiments must run on branch: feature/v10-experiments
+  Do NOT commit experimental code to main.
+  Do NOT trigger run_backtest.yml from main.
+  Reason: scrape_broker_summary.yml is actively writing to idx-database.
+  run_backtest.yml on main uploads idx-database with overwrite=true — this
+  would clobber the scraper's work if run while scraping is in progress.
+  The feature branch workflow is read-only for idx-database (upload step
+  is gated: if: always() && github.ref == 'refs/heads/main').
 
-AFTER 2024 BACKFILL:
+IMMEDIATE — PARALLEL TRACKS:
+  Track A: 2024 broker data backfill (scraper running, sequential batches)
+    1. Q1 2024: ✅ batch 1 triggered (2024-01-01→2024-03-01) | batch 2→3→batch4-split pending
+    2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
+    3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
+    4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
+    After each quarter: export_summary.yml → update_split_files.yml
+
+  Track B: v10 experiments on feature/v10-experiments branch (one per session)
+    v9 baseline: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
+    Always test: 2025-01-01→2025-12-31 | capital=1B | real_broker=true
+    Trigger: gh workflow run run_backtest.yml --ref feature/v10-experiments ...
+
+    ⬜ Exp 1: Emergency stop -12% → -10%
+              File: config.py:137 (emergency_stop_pct = 0.12 → 0.10)
+              Hypothesis: tighter stop reduces worst losses without killing winners
+    ⬜ Exp 2: IHSG market filter (IHSG close > MA20 AND daily return > -1%)
+              Files: signals/market_regime.py, signals/signal_combiner.py
+              Hypothesis: skip entries on unhealthy IHSG days → higher WR, fewer bad entries
+    ⬜ Exp 3: FF magnitude quantification (5-day sum > 1.5x 20-day avg absolute flow)
+              File: signals/signal_combiner.py (_add_foreign_flow_signals)
+              Hypothesis: require abnormally strong FF, not just any positive flow
+    ⬜ Exp 4a: Support/resistance detection + break-below-support exit
+              Files: signals/signal_combiner.py, backtest/portfolio.py
+              Hypothesis: historical price clusters identify structural support levels
+    ⬜ Exp 4b: Averaging up on resistance break (only after 4a shows useful S/R levels)
+              Files: backtest/engine.py, backtest/portfolio.py
+              Note: engine rewrite required — position currently entered once, never added to
+
+AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
   5. Re-run backtest for 2024 with real_broker=true
   6. Compare 2024 real vs synthetic (-37M) — expect improvement
   7. Run combined 2024+2025 backtest for full picture
-
-INTEGRATION & IMPROVEMENT:
-  8. Integrate real broker data into signal_combiner.py (live signals)
-     - Replace synthetic ForeignFlow with real Asing net_value from broker_summary
-     - This is the LIVE path — test carefully before deploying
-  9. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
-     Use broker accumulation signal to decide hold vs exit
-  10. Update daily_signals.yml to include live broker scraping each day
+  8. Merge feature/v10-experiments → main via PR
+  9. Integrate into live path (main_daily.py → signal_combiner.py)
+  10. Update daily_signals.yml with live broker scraping
   11. Paper trade 1 month → go live
 
 COMPLETED (April 4, 2026):
   ✅ v9 GitHub Actions re-run confirmed — identical results (run 23958174058)
   ✅ 2024 Q1 broker scrape batch 1 triggered (run 23958438367, 2024-01-01→2024-03-01)
   ✅ Trade log downloaded locally: reports/latest/trade_log.csv
+  ✅ feature/v10-experiments branch created and pushed
+  ✅ run_backtest.yml: idx-database upload gated to main branch only
 
 COMPLETED (April 3, 2026):
   ✅ v9: 4 structural fixes (warmup, gap-up filter, emergency -12%, cluster limit)

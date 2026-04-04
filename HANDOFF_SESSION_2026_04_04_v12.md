@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 4, 2026 (v12 — 2024 backfill started, trade log analysis pending)
+> Last updated: April 4, 2026 (v12 — 2024 backfill started, feature/v10-experiments branch created)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -52,6 +52,12 @@ TREND_EXIT: 8 trades, Rp +210M total
 - Both touch `idx-database` artifact; `run_backtest.yml` uploads `if: always()` with `overwrite: true`
 - Race condition: last workflow to finish overwrites the other's data
 - Decision: backtest first → completed → then scraper triggered
+
+### feature/v10-experiments branch — CREATED
+- Branch pushed to `origin/feature/v10-experiments`
+- **Why:** 2024 broker summary scraper is running. All v10 code experiments must live in this branch. Nothing experimental touches `main` or the shared `idx-database` artifact until the scraper completes.
+- **Workflow change:** `run_backtest.yml` — "Save database" step now has `if: always() && github.ref == 'refs/heads/main'`. On the feature branch, the workflow downloads (reads) `idx-database` but never uploads/overwrites it. Main branch retains full read+write behaviour.
+- **How to trigger backtest on the branch:** GitHub Actions → Run Backtest → "Run workflow" dropdown → switch branch to `feature/v10-experiments` → fill inputs → Run. Or via CLI: `gh workflow run run_backtest.yml --ref feature/v10-experiments -f start_date=... -f end_date=... -f capital=1000000000 -f real_broker=true`
 
 ---
 
@@ -148,13 +154,28 @@ After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
 - Compare vs synthetic: 45 trades, 33% WR, -Rp 37M, PF 0.68
 - Run combined 2024+2025
 
-### TRADE LOG ANALYSIS (pending — to do in Claude chat)
-- Trade log at: `reports/latest/trade_log.csv`
-- Upload to Claude chat: this handoff doc + `DEVELOPER_CONTEXT.py` + `trade_log.csv` + `metrics_summary.txt`
-- Key question: what hypotheses to test in v10?
-- Known weak spot: 6–10 day stop losses (high count, low WR, large loss pool)
+### v10 EXPERIMENTS — ORDERED QUEUE
+⚠️ **ALL experiments run on `feature/v10-experiments` branch ONLY.**
+⚠️ **Do NOT merge to main and do NOT trigger backtest from main while the 2024 broker scraper is running.**
+⚠️ **One experiment per session. Backtest → compare vs v9 baseline → accept/reject → document → next.**
 
-### INTEGRATION
-- Integrate v9 signal logic into live path (`main_daily.py → signal_combiner.py`)
+v9 baseline to beat: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
+
+| # | Experiment | File(s) to change | Hypothesis |
+|---|------------|-------------------|------------|
+| 1 | Emergency stop -12% → -10% | `config.py:137` | Tighter stop reduces worst losses without killing winners. Expect fewer large losses, possibly fewer trades. |
+| 2 | IHSG market filter (close > MA20, daily > -1%) | `signals/market_regime.py`, `signals/signal_combiner.py` | Skip entries on days IHSG is below its 20MA or just crashed >1%. Expect fewer trades, potentially higher WR. |
+| 3 | FF magnitude: require 5-day sum > 1.5x 20-day avg absolute flow | `signals/signal_combiner.py:_add_foreign_flow_signals()` | Requiring abnormally strong FF (not just any positive flow) improves signal quality for foreign-driven stocks. |
+| 4a | Support/resistance detection + break-below exit | `signals/signal_combiner.py`, `backtest/portfolio.py` | Historical price clusters identify structural support. Breaking below → stronger exit signal than time/stop. |
+| 4b | Averaging up on resistance break | `backtest/engine.py`, `backtest/portfolio.py` | If stock breaks next resistance level while held, add to position. Only attempt after 4a shows useful S/R levels. |
+
+After each experiment:
+- Update `DEVELOPER_CONTEXT.py` with result and learning
+- Update this handoff doc with the new baseline (if accepted)
+- Mark experiment complete in the table above
+
+### INTEGRATION (after 2024 backfill complete + v10 experiments satisfactory)
+- Merge `feature/v10-experiments` → `main` via PR
+- Integrate v9 (+ any accepted v10 changes) into live path (`main_daily.py → signal_combiner.py`)
 - Update `daily_signals.yml` with live broker scraping
 - Paper trade 1 month → go live
