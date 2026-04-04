@@ -160,10 +160,12 @@ Refresh Stockbit token before each session. One batch at a time, sequential.
 
 ```
 Q1 2024:
-  ✅ batch 1 triggered (2024-01-01→2024-03-01, tickers 1–25)
-  ⬜ batch 2 (2024-01-01→2024-03-01, tickers 26–50)
-  ⬜ batch 3 (2024-01-01→2024-03-01, tickers 51–75)
-  ⬜ batch 4 split: Jan 1–Feb 15 | Feb 15–Mar 31 (tickers 76+)
+  ✅ batch 1 (2024-01-01→2024-03-31, tickers 1–25)
+  ✅ batch 2 (2024-01-01→2024-03-31, tickers 26–50)
+  ✅ batch 3 (2024-01-01→2024-03-31, tickers 51–75)
+  🔄 batch 4 part 1 RUNNING (2024-01-01→2024-02-15, tickers 76+)
+  ⬜ batch 4 part 2 (2024-02-15→2024-03-31, tickers 76+)
+  — DB after batches 1–3: 1,228,714 records, DATA_OK=true
 Q2 2024: batch1 → batch2 → batch3 → batch4 (Apr 1–May 15) → batch4 (May 15–Jun 30)
 Q3 2024: batch1 → batch2 → batch3 → batch4 (Jul 1–Aug 15) → batch4 (Aug 15–Sep 30)
 Q4 2024: batch1 → batch2 → batch3 → batch4 (Oct 1–Nov 15) → batch4 (Nov 15–Dec 31)
