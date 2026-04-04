@@ -206,9 +206,16 @@ class SignalCombiner:
             (df["net_foreign"] >= 0)            # today is not a net sell day
         )
 
+        # ── Check 3 (Exp 3): Foreign flow MAGNITUDE ──
+        # 5-day sum must exceed 1.5x the 20-day average absolute daily flow.
+        # Filters out weak positive flow that barely qualifies — only enter
+        # when foreigners are accumulating abnormally hard.
+        avg_abs_flow_20d = df["net_foreign"].abs().rolling(20, min_periods=10).mean()
+        df["ff_magnitude_ok"] = df["ff_rolling_sum"] > 1.5 * avg_abs_flow_20d.replace(0, np.nan).fillna(0)
+
         # ── Combined confirmation for foreign-driven stocks ──
-        # Must pass BOTH: recent positive days AND trend is positive
-        ff_full_confirm = ff_meets_count & df["ff_trend_positive"]
+        # Must pass ALL THREE: recent positive days, trend positive, AND magnitude ok
+        ff_full_confirm = ff_meets_count & df["ff_trend_positive"] & df["ff_magnitude_ok"]
 
         df["ff_confirmed"] = True  # default for domestic stocks
         mask_foreign = df["is_foreign_driven"] == True
