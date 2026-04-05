@@ -200,7 +200,7 @@ After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
 | ~~4~~ | Post-TREND_EXIT cooldown 30d | **ACCEPTED** (run 24005616009) — ⚠️ re-test 30d with 2024 data |
 | ~~5~~ | Remove Rp 150 min price filter | **REJECTED** (run 24005950325) — WTON + GOTO both EMERGENCY_STOP. PF 2.52→2.09, -Rp 20M. Filter stays. |
 | ~~6~~ | IHSG multi-day momentum filter | **REJECTED** (run 24006068747) — PF 2.52→1.86, -Rp 68M. 5d lookback blocks best breakouts that start recoveries. |
-| 7 | Financial sector entry limit | ⬜ Max 2 Financial Services entries per rolling 10 days. 4/4 bank entries lost (-Rp 18.4M). `engine.py` |
+| ~~7~~ | Financial sector entry limit | **REJECTED** (run 24006206306) — zero effect. 4 bank entries in 2025 are in May/Jul/Aug/Nov, never in same 10-day window. Re-test with 2024+2025 data. |
 | 8 | Breakout margin filter | ⬜ Require close ≥ 1–2% above 60-day high (not just barely above). Targets marginal entries → emergency stops. `signal_combiner.py` |
 | 9 | Early no-follow-through exit | ⬜ Exit if no +1% gain by day 8 after hold period. Frees capital from 6 TIME_EXIT dead trades (-Rp 11.1M, avg 16 days). `portfolio.py` |
 | 10 | ATR/price volatility cap | ⬜ Skip entries if ATR > 5% of close. Filters whippy stocks that trigger emergency stops. `signal_combiner.py` |

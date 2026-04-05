@@ -742,13 +742,12 @@ IMMEDIATE — PARALLEL TRACKS:
               Too backward-looking — best breakouts start recoveries when 5d return still negative.
               Single-day IHSG filter (Exp 2) is already the right granularity.
 
-    ⬜ Exp 7: Sector-specific entry limit (Financial Services)
-              File: backtest/engine.py (extend cluster limit to be sector-aware)
-              Hypothesis: 4 of 4 Financial Services entries were losers (BBRI, BTPS, BBTN, BMRI,
-              -Rp 18.4M combined). Bank stocks move in lockstep — entering multiple banks in the
-              same period is correlated exposure, not diversification. Cap at max 2 Financial
-              Services entries per rolling 10 trading days (narrower version of cluster limit).
-              Pattern source: Trades #6, #10, #13, #27
+    ✅ Exp 7: REJECTED — Financial Services sector entry limit (run 24006206306)
+              Zero effect — identical results to baseline (41t, PF 2.52, +Rp 145M).
+              Root cause: 4 bank entries in 2025 are in May, Jul, Aug, Nov — never within
+              the same 10-day window. Limit never fires on 2025 data.
+              ⚠️ Re-test with full 2024+2025 data — bank clustering may be more common
+              in a fuller dataset. Idea is sound but 2025 alone doesn't expose it.
 
     ⬜ Exp 8: Breakout margin filter (require close X% above 60-day high)
               File: signals/signal_combiner.py (_add_breakout_signals)
