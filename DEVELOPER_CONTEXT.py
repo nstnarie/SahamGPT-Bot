@@ -257,6 +257,26 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp4_trend_exit_cooldown": {
+        "hypothesis": "After TREND_EXIT (+15%+ gain), block re-entry for 30 trading days. "
+                      "Stock is at risk of exhaustion/distribution after a big move. "
+                      "EMTK re-entered 17 trading days after TREND_EXIT → -Rp 7.9M emergency stop.",
+        "change": "engine.py: cooldown now triggers on STOP_LOSS OR TREND_EXIT (was STOP_LOSS only). "
+                  "Reuses existing stop_loss_cooldown_days=30 config value.",
+        "result": {
+            "trades": 41, "win_rate": "41.5%", "pnl": "Rp +145M", "pf": 2.52,
+            "total_return": "14.55%", "max_drawdown": "-3.37%",
+            "sharpe": 1.11, "sortino": 1.93, "calmar": 4.59, "exposure": "69.7%",
+        },
+        "vs_baseline": "vs Exp 2 baseline (42t, 40.5% WR, PF 2.33, +Rp 137M, Calmar 4.32): "
+                       "PF +0.19, WR +1.0pp, return +Rp 8M, Sharpe +0.09, Calmar +0.27. "
+                       "EMTK Oct re-entry eliminated (-Rp 7.9M emergency stop gone). All metrics improved.",
+        "verdict": "ACCEPTED. All metrics improved. 30-day cooldown is the right duration for 2025 data. "
+                   "⚠️ Re-test cooldown duration (30d) once full 2024 broker data is available — "
+                   "2024 may have different re-entry patterns. New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59.",
+        "run_id": "24005616009",
+        "date": "2026-04-05",
+    },
     "exp3_ff_magnitude_filter": {
         "hypothesis": "Require 5-day FF sum > 1.5x 20-day avg absolute flow. Only enter on abnormally strong accumulation.",
         "change": "signal_combiner.py: added ff_magnitude_ok as third condition in ff_full_confirm.",
@@ -664,15 +684,13 @@ IMMEDIATE — PARALLEL TRACKS:
     Always test: 2025-01-01→2025-12-31 | capital=1B | real_broker=true
     Trigger: gh workflow run run_backtest.yml --ref feature/v10-experiments ...
 
-    ⬜ Exp 1: Emergency stop -12% → -10%
-              File: config.py:137 (emergency_stop_pct = 0.12 → 0.10)
-              Hypothesis: tighter stop reduces worst losses without killing winners
-    ⬜ Exp 2: IHSG market filter (IHSG close > MA20 AND daily return > -1%)
-              Files: signals/market_regime.py, signals/signal_combiner.py
-              Hypothesis: skip entries on unhealthy IHSG days → higher WR, fewer bad entries
-    ⬜ Exp 3: FF magnitude quantification (5-day sum > 1.5x 20-day avg absolute flow)
-              File: signals/signal_combiner.py (_add_foreign_flow_signals)
-              Hypothesis: require abnormally strong FF, not just any positive flow
+    ✅ Exp 1: REJECTED — Emergency stop -10% (run 23982773904)
+    ✅ Exp 2: ACCEPTED — IHSG market filter (run 23982879523) — baseline PF 2.33
+    ✅ Exp 3: REJECTED — FF magnitude filter (run 23982978951)
+    ✅ Exp 4: ACCEPTED — Post-TREND_EXIT cooldown 30d (run 24005616009)
+              PF 2.33→2.52, WR +1.0pp, return +Rp 8M, Sharpe +0.09, Calmar +0.27
+              New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59
+              ⚠️ Re-test 30d cooldown value once full 2024 data available
     ⬜ Exp 4a: Support/resistance detection + break-below-support exit
               Files: signals/signal_combiner.py, backtest/portfolio.py
               Hypothesis: historical price clusters identify structural support levels
@@ -688,6 +706,12 @@ AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
   9. Integrate into live path (main_daily.py → signal_combiner.py)
   10. Update daily_signals.yml with live broker scraping
   11. Paper trade 1 month → go live
+
+COMPLETED (April 5, 2026):
+  ✅ Exp 4 ACCEPTED — post-TREND_EXIT cooldown 30d (run 24005616009)
+     PF 2.33→2.52 | WR +1pp | +Rp 8M | Calmar 4.32→4.59
+     Eliminates EMTK Oct re-entry (-Rp 7.9M emergency stop)
+     ⚠️ Re-test 30d cooldown value with full 2024 data
 
 COMPLETED (April 4, 2026):
   ✅ v9 GitHub Actions re-run confirmed — identical results (run 23958174058)
