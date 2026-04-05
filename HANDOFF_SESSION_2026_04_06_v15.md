@@ -1,0 +1,199 @@
+# SahamGPT-Bot — Session Handoff Document
+> Last updated: April 6, 2026 (v15 — Exp 4 accepted, Exp 5-7 rejected, baseline PF 2.52)
+> Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
+> Paste this at the start of a new chat to resume seamlessly.
+
+---
+
+## ⚠️ CLAUDE: READ THIS BEFORE DOING ANYTHING
+
+1. **Read `DEVELOPER_CONTEXT.py` first** — locked rules, hard parameters, architectural decisions.
+2. **Never answer workflow questions without reading the actual .yml files first.**
+3. **`idx-database` is shared** — `scrape_broker_summary.yml`, `initial_scrape.yml`, `bootstrap_database.yml`, `daily_signals.yml`. **NEVER run in parallel.**
+4. **Data loss is unrecoverable.** When in doubt, stop and ask Arie.
+
+---
+
+## 1. Baselines
+
+### v9 — main branch baseline
+| Metric | Value |
+|--------|-------|
+| Trades | 45 |
+| Win Rate | 37.8% |
+| Total Return | +12.74% (+Rp 127M) |
+| Profit Factor | **2.14** |
+| Max Drawdown | -3.28% |
+| Sharpe | 0.89 |
+| Calmar | **4.16** |
+
+### feature/v10-experiments — current baseline (post Exp 4)
+| Metric | Value |
+|--------|-------|
+| Trades | 41 |
+| Win Rate | **41.5%** |
+| Total Return | +14.55% (+Rp 145M) |
+| Profit Factor | **2.52** |
+| Max Drawdown | -3.37% |
+| Sharpe | **1.11** |
+| Sortino | **1.93** |
+| Calmar | **4.59** |
+
+---
+
+## 2. What Happened This Session (April 5–6, 2026)
+
+### Trade Log Loss Analysis (done in Opus)
+Full analysis of all 28 losing trades (-Rp 103M total) from v9 backtest.
+5 new experiments queued (Exp 6–10) based on patterns found:
+- Pattern 1: Apr-May cluster (-Rp 27.8M, 7 straight losses) → Exp 6
+- Pattern 2: Re-entry after exhaustion → Exp 4 (already done)
+- Pattern 3: Emergency stops (ESSA, HRUM, EMTK Oct) → Exp 8, 10
+- Pattern 4: Financial sector correlation (-Rp 18.4M) → Exp 7
+- Pattern 5: TIME_EXIT dead trades (-Rp 11.1M) → Exp 9
+
+### Experiments Run This Session
+| Exp | Description | Run ID | Result |
+|-----|-------------|--------|--------|
+| 4 | Post-TREND_EXIT cooldown 30d | 24005616009 | ✅ ACCEPTED — PF +0.19, +Rp 8M |
+| 5 | Remove Rp 150 min price filter | 24005950325 | ❌ REJECTED — WTON+GOTO both emergency stopped |
+| 6 | IHSG 5-day momentum filter | 24006068747 | ❌ REJECTED — too backward-looking, -Rp 68M |
+| 7 | Financial sector entry limit | 24006206306 | ❌ REJECTED — zero effect, banks naturally spread |
+
+### 2024 Q2 Batch 3 — STILL RUNNING
+- Run 24003326023, tickers 51–74, Apr 1→Jun 30
+- Started ~14:15 WIB Apr 5, expected ~4h — should complete soon
+- **Do NOT trigger batch 4 until this is confirmed complete**
+
+---
+
+## 3. Entry / Exit Rules (feature/v10-experiments)
+
+### Entry (ALL must be true)
+| # | Condition | Value |
+|---|-----------|-------|
+| 1 | Resistance breakout | Close > 60-day high |
+| 2 | Volume spike | 1.5x–5.0x 20-day avg |
+| 3 | Uptrend | Close > 50-day MA |
+| 4 | Min price | >= Rp 150 |
+| 5 | No selling pressure | Upper shadow < 40%, close upper 2/3 |
+| 6 | Foreign flow trend | 5-day FF sum > 0, breakout day not net sell *(if `is_foreign_driven`)* |
+| 7 | RSI | 40–75 |
+| 8 | MACD | Histogram > 0 |
+| 9 | Regime | Not BEAR + IHSG > MA20 + IHSG daily > -1% *(Exp 2)* |
+| 10 | No gap-up | Entry day open not >7% above signal day close |
+| 11 | Cluster limit | Max 5 new entries in rolling 10 trading days |
+
+### Exit (first trigger wins)
+| Priority | Rule |
+|----------|------|
+| 1 | -12% emergency stop (always) |
+| 2 | No stop first 5 days |
+| 3 | Close < MA10 after +15% gain |
+| 4 | -7% or 1.5xATR, cap -10% — hold extension if acc_score > 0 on days 6–10 |
+| 5 | Sell 30% at +15% |
+| 6 | No +3% in 15 days + below MA10 |
+| 7 | 5 consecutive net foreign sell days (foreign-driven, price weakening) |
+| 8 | BEAR regime = close all |
+
+### Re-entry Cooldown (Exp 4)
+| Exit Type | Cooldown |
+|-----------|----------|
+| STOP_LOSS | 30 trading days |
+| TREND_EXIT | 30 trading days *(NEW — Exp 4)* |
+
+---
+
+## 4. Architecture
+
+### Two execution paths — NEVER cross-contaminate
+- BACKTEST: `main_backtest.py → backtest/engine.py`
+- LIVE: `main_daily.py → signals/signal_combiner.py`
+
+### Key files changed in feature/v10-experiments (accepted: Exp 2 + Exp 4)
+- `signals/market_regime.py`: adds `ihsg_entry_ok` (Exp 2)
+- `signals/signal_combiner.py`: gates BUY on `ihsg_entry_ok` (Exp 2)
+- `backtest/engine.py`: cooldown on `STOP_LOSS OR TREND_EXIT` (Exp 4)
+
+### run_backtest.yml from feature branch
+Safe while scraper runs — idx-database upload gated: `if: always() && github.ref == 'refs/heads/main'`
+
+---
+
+## 5. Database State
+
+- **broker_summary:** 1,292,222 records, 2024-01-02 → 2025-12-30
+- **Q1 2024:** COMPLETE ✅ — 58 trading days, all 109 tickers, split files updated
+- **Q2 2024:** batches 1+2 done, batch 3 RUNNING (run 24003326023)
+- **daily_prices:** 107 tickers, 2021-01-01 to 2026-03-28
+- **Split files:** `idx_broker_part_a.db` (490,967) + `idx_broker_part_b.db` (801,255) = 1,292,222 ✅
+
+---
+
+## 6. Workflows
+
+All workflows touching idx-database must run **sequentially, never in parallel.**
+
+| File | Touches idx-database? | Purpose |
+|------|-----------------------|---------|
+| `daily_signals.yml` | ✅ | Full pipeline → Telegram (weekday 16:35 WIB) |
+| `initial_scrape.yml` | ✅ | Historical price download |
+| `run_backtest.yml` | ✅ | On-demand backtesting |
+| `scrape_broker_summary.yml` | ✅ | Batch broker data scraping |
+| `export_summary.yml` | ❌ | Export per-day ticker count CSV |
+| `bootstrap_database.yml` | ✅ | Merges split files into artifact |
+| `update_split_files.yml` | ❌ | Regenerates split files |
+
+---
+
+## 7. Next Steps (in order)
+
+### IMMEDIATE — Complete Q2 2024 Backfill
+```
+Q2 2024:
+  ✅ batch 1 done (run 23995308646, tickers 1–25)
+  ✅ batch 2 done (run 23999239806, tickers 26–50)
+  🔄 batch 3 RUNNING (run 24003326023, tickers 51–74) — verify complete first
+  ⬜ Refresh Stockbit token
+  ⬜ batch 4 pt1 (2024-04-01→2024-05-15, tickers 75+)
+  ⬜ batch 4 pt2 (2024-05-15→2024-06-30, tickers 75+)
+  ⬜ export_summary.yml → verify → update_split_files.yml
+
+Q3 2024: batch1 → batch2 → batch3 → batch4 Jul → batch4 Aug → batch4 Sep
+Q4 2024: batch1 → batch2 → batch3 → batch4 Oct → batch4 Nov → batch4 Dec
+```
+⚠️ Batch 4 = 47 tickers after expansion — **run per month (~2.2h), NOT per quarter (~6.7h)**
+
+### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION
+1. Add 13 tickers to `LQ45_TICKERS` in `scraper/price_scraper.py`:
+   BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG, AADI
+2. Run `initial_scrape.yml` — OHLCV for new tickers
+3. Run `scrape_broker_summary.yml` with tickers override, 2024-01-01 → 2025-12-31
+4. `export_summary.yml` → `update_split_files.yml` → push to main
+
+### v10 EXPERIMENTS — STATUS
+
+**Current baseline (post Exp 4): 41t | 41.5% WR | PF 2.52 | +Rp 145M | DD -3.37% | Calmar 4.59**
+
+| # | Experiment | Status |
+|---|------------|--------|
+| ~~1~~ | Emergency stop -12% → -10% | ❌ REJECTED (run 23982773904) |
+| ~~2~~ | IHSG market filter (daily) | ✅ ACCEPTED (run 23982879523) |
+| ~~3~~ | FF magnitude filter | ❌ REJECTED (run 23982978951) |
+| ~~4~~ | Post-TREND_EXIT cooldown 30d | ✅ ACCEPTED (run 24005616009) ⚠️ re-test 30d with 2024 data |
+| ~~5~~ | Remove Rp 150 min price filter | ❌ REJECTED (run 24005950325) — WTON+GOTO both emergency stopped |
+| ~~6~~ | IHSG 5d momentum filter | ❌ REJECTED (run 24006068747) — too backward-looking |
+| ~~7~~ | Financial sector entry limit | ❌ REJECTED (run 24006206306) — no effect, re-test with 2024+2025 |
+| **8** | Breakout margin filter (close ≥1-2% above 60d high) | ⬜ NEXT |
+| **9** | Early no-follow-through exit (no +1% by day 8) | ⬜ |
+| **10** | ATR/price volatility cap (ATR > 5% of close → skip) | ⬜ |
+| 7a | Support/resistance detection | ⬜ ON HOLD |
+| 7b | Averaging up on resistance break | ⬜ ON HOLD (needs 7a) |
+| 7c | Chart pattern detection | ⬜ ON HOLD (needs 7a) |
+
+### INTEGRATION (after 2024 backfill + all experiments done)
+- Merge `feature/v10-experiments` → `main` (Exp 2 + Exp 4 accepted changes)
+- Run `run_backtest.yml` from main to confirm stable post-merge
+- Integrate into live path (`main_daily.py → signal_combiner.py`)
+- Update `daily_signals.yml` with live broker scraping
+- Paper trade 1 month → go live
