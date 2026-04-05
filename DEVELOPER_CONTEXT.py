@@ -691,12 +691,76 @@ IMMEDIATE — PARALLEL TRACKS:
               PF 2.33→2.52, WR +1.0pp, return +Rp 8M, Sharpe +0.09, Calmar +0.27
               New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59
               ⚠️ Re-test 30d cooldown value once full 2024 data available
-    ⬜ Exp 4a: Support/resistance detection + break-below-support exit
-              Files: signals/signal_combiner.py, backtest/portfolio.py
-              Hypothesis: historical price clusters identify structural support levels
-    ⬜ Exp 4b: Averaging up on resistance break (only after 4a shows useful S/R levels)
+
+    ⬜ Exp 5: Remove Rp 150 min price filter — NEXT (after 2024 backfill complete)
+              File: signals/signal_combiner.py (min_price check in _add_breakout_signals)
+              Hypothesis: real market observation found sub-Rp 150 stocks with valid breakout
+              setups (e.g. DEWA). Test if removing the filter improves trade count and return
+              without degrading quality (PF, WR, DD).
+
+    ── From v9 Trade Log Loss Analysis (28 losses, -Rp 103M total) ──
+
+    ⬜ Exp 6: IHSG multi-day momentum filter
+              File: signals/market_regime.py (add ihsg_momentum_ok column)
+              Hypothesis: Exp 2 checks IHSG on a single day (close > MA20, daily > -1%).
+              But the Apr-May 2025 losing cluster (-Rp 27.8M, 7 consecutive losses) happened
+              during a multi-day IHSG rollover that passed single-day checks. Adding a 5-day
+              or 10-day IHSG momentum condition (e.g. IHSG 5d return > 0) should filter
+              entries made during broader market weakness that single-day checks miss.
+              Pattern source: Trades #1-8 (Apr 25–May 19 entries, all losers)
+
+    ⬜ Exp 7: Sector-specific entry limit (Financial Services)
+              File: backtest/engine.py (extend cluster limit to be sector-aware)
+              Hypothesis: 4 of 4 Financial Services entries were losers (BBRI, BTPS, BBTN, BMRI,
+              -Rp 18.4M combined). Bank stocks move in lockstep — entering multiple banks in the
+              same period is correlated exposure, not diversification. Cap at max 2 Financial
+              Services entries per rolling 10 trading days (narrower version of cluster limit).
+              Pattern source: Trades #6, #10, #13, #27
+
+    ⬜ Exp 8: Breakout margin filter (require close X% above 60-day high)
+              File: signals/signal_combiner.py (_add_breakout_signals)
+              Hypothesis: current filter passes any close > 60d high, even by 0.1%.
+              Marginal breakouts (barely above resistance) fail more often than strong ones.
+              Require close to be at least 1–2% above the 60-day high to confirm the
+              resistance is genuinely broken and not just noise. May reduce trade count
+              but improve WR and PF.
+              Pattern source: Emergency stop trades (ESSA, HRUM, EMTK Oct) — marginal entries
+
+    ⬜ Exp 9: Early no-follow-through exit
+              File: backtest/portfolio.py (check_exit_conditions)
+              Hypothesis: 6 TIME_EXIT losses held 15-18 days with only -1% to -3.9% loss
+              (-Rp 11.1M combined). These stocks never moved after the breakout. If a stock
+              hasn't gained at least +1% by day 8 (after the 5-day hold), it has no momentum
+              and is tying up capital. Exit early to redeploy into stronger setups.
+              Risk: may clip slow-starters that eventually move. Watch carefully.
+              Pattern source: Trades #8, #17, #24, #25, #26, #28
+
+    ⬜ Exp 10: ATR/price volatility cap
+              File: signals/signal_combiner.py or config.py
+              Hypothesis: stocks with ATR/price > ~5% are too whippy — normal daily moves
+              regularly trigger stops before the trend develops. The emergency stops (ESSA,
+              HRUM) were both high-volatility small-caps. Adding a maximum ATR/price ratio
+              filter (e.g., skip if ATR > 5% of close) would exclude inherently unstable
+              stocks while keeping steady trend candidates.
+              Pattern source: Emergency stop trades (-Rp 25.1M from 3 trades)
+
+    ── ON HOLD (complex — do after integration) ──
+
+    ⬜ Exp 7a: Support/resistance detection for entry + exit
+              Files: signals/signal_combiner.py, backtest/engine.py, backtest/portfolio.py
+              Hypothesis: historical price clusters identify structural support levels.
+              Entry: only buy on confirmed resistance breakout (augments 60-day high).
+              Exit: break below support → stronger signal than fixed % stop.
+
+    ⬜ Exp 7b: Averaging up on resistance break — ON HOLD (needs 7a)
               Files: backtest/engine.py, backtest/portfolio.py
-              Note: engine rewrite required — position currently entered once, never added to
+              Hypothesis: if stock breaks next resistance level while held, add to position.
+              Note: engine rewrite required — position currently entered once, never added to.
+
+    ⬜ Exp 7c: Chart pattern detection — ON HOLD (needs 7a)
+              Files: signals/signal_combiner.py, backtest/engine.py
+              Hypothesis: detect ascending triangle, H&S, IH&S, double bottom/top from 7a's
+              S/R structure. Use as entry/exit filters + IHSG trend detection. Conclusions only.
 
 AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
   5. Re-run backtest for 2024 with real_broker=true

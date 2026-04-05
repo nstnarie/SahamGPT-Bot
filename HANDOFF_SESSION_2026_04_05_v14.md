@@ -198,10 +198,15 @@ After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
 | ~~2~~ | IHSG market filter | **ACCEPTED** (run 23982879523) |
 | ~~3~~ | FF magnitude filter | **REJECTED** (run 23982978951) |
 | ~~4~~ | Post-TREND_EXIT cooldown 30d | **ACCEPTED** (run 24005616009) — ⚠️ re-test 30d with 2024 data |
-| 5 | Remove Rp 150 min price filter | ⬜ NEXT — after 2024 backfill complete |
-| 6a | Support/resistance detection | ⬜ ON HOLD |
-| 6b | Averaging up on resistance break | ⬜ ON HOLD (needs 6a) |
-| 6c | Chart pattern detection | ⬜ ON HOLD (needs 6a) |
+| 5 | Remove Rp 150 min price filter | ⬜ NEXT — after 2024 backfill complete. `signal_combiner.py` |
+| 6 | IHSG multi-day momentum filter | ⬜ Require IHSG 5d momentum > 0 at entry. Targets Apr-May cluster (-Rp 27.8M, 7 straight losses). `market_regime.py` |
+| 7 | Financial sector entry limit | ⬜ Max 2 Financial Services entries per rolling 10 days. 4/4 bank entries lost (-Rp 18.4M). `engine.py` |
+| 8 | Breakout margin filter | ⬜ Require close ≥ 1–2% above 60-day high (not just barely above). Targets marginal entries → emergency stops. `signal_combiner.py` |
+| 9 | Early no-follow-through exit | ⬜ Exit if no +1% gain by day 8 after hold period. Frees capital from 6 TIME_EXIT dead trades (-Rp 11.1M, avg 16 days). `portfolio.py` |
+| 10 | ATR/price volatility cap | ⬜ Skip entries if ATR > 5% of close. Filters whippy stocks that trigger emergency stops. `signal_combiner.py` |
+| 7a | Support/resistance detection | ⬜ ON HOLD — do after integration |
+| 7b | Averaging up on resistance break | ⬜ ON HOLD (needs 7a) |
+| 7c | Chart pattern detection | ⬜ ON HOLD (needs 7a) |
 
 ### INTEGRATION (after 2024 backfill + all experiments done)
 - Merge `feature/v10-experiments` → `main` (Exp 2 IHSG filter + Exp 4 cooldown)
