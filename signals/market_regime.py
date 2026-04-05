@@ -71,19 +71,7 @@ class MarketRegimeFilter:
         df["ma_20"] = df["close"].rolling(20, min_periods=10).mean()
         df["ihsg_above_ma20"] = df["close"] > df["ma_20"]
         df["ihsg_daily_return"] = df["close"].pct_change()
-
-        # Exp 6: IHSG 5-day momentum — skip entries when IHSG has been drifting down
-        # Single-day check (Exp 2) passes during a multi-day rollover if today happens to be flat.
-        # Apr-May 2025 losing cluster (-Rp 27.8M, 7 straight stops) happened during a sustained
-        # IHSG decline that passed daily checks. Requiring 5d return > 0 filters these periods.
-        df["ihsg_5d_return"] = df["close"].pct_change(5)
-        df["ihsg_momentum_ok"] = df["ihsg_5d_return"] > 0
-
-        df["ihsg_entry_ok"] = (
-            df["ihsg_above_ma20"] &
-            (df["ihsg_daily_return"] > -0.01) &
-            df["ihsg_momentum_ok"]
-        )
+        df["ihsg_entry_ok"] = df["ihsg_above_ma20"] & (df["ihsg_daily_return"] > -0.01)
 
         logger.info(
             f"Regime computed: "
