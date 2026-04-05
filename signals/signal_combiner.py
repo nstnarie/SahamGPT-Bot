@@ -107,6 +107,9 @@ class SignalCombiner:
             df["vol_ratio"] = df["volume"] / df["vol_avg_20"].replace(0, np.nan)
             df["vol_ratio"] = df["vol_ratio"].fillna(1.0)
 
+        # Minimum price filter
+        min_price = self.config.universe.min_stock_price
+
         # ── NEW: Selling pressure detection (long upper shadow) ──
         # A candle with a long upper shadow means: price went up during the day
         # but sellers pushed it back down before close. This is bearish even if
@@ -137,6 +140,7 @@ class SignalCombiner:
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
             (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
             (df["close"] > df["ma_50"]) &                 # above MA50 (uptrend)
+            (df["close"] >= min_price) &                  # minimum price filter
             (~df["has_selling_pressure"]) &               # NO selling pressure
             (df["high_Nd"].notna())                       # enough data
         )
