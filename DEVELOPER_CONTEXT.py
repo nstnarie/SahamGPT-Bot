@@ -253,7 +253,58 @@ LATEST_BACKTEST_RESULTS = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-04-01)
+# v10 EXPERIMENT LOG (feature/v10-experiments branch)
+# ══════════════════════════════════════════════════════════════
+
+V10_EXPERIMENTS = {
+    "exp3_ff_magnitude_filter": {
+        "hypothesis": "Require 5-day FF sum > 1.5x 20-day avg absolute flow. Only enter on abnormally strong accumulation.",
+        "change": "signal_combiner.py: added ff_magnitude_ok as third condition in ff_full_confirm.",
+        "result": {
+            "trades": 43, "win_rate": "39.5%", "pnl": "Rp +134M", "pf": 2.25,
+            "total_return": "13.36%", "max_drawdown": "-3.39%",
+            "sharpe": 0.96, "sortino": 1.59, "calmar": 4.17, "exposure": "69.4%",
+        },
+        "vs_baseline": "vs Exp 2 baseline (42t, 40.5% WR, PF 2.33, +Rp 137M, Calmar 4.32): "
+                       "all metrics declined. PF -0.08, WR -1pp, return -Rp 3M, Sharpe -0.06.",
+        "verdict": "REJECTED. Existing count+trend checks already capture quality adequately. "
+                   "Magnitude multiplier adds noise without benefit on 2025 dataset. Reverted.",
+        "run_id": "23982978951",
+        "date": "2026-04-04",
+    },
+    "exp2_ihsg_market_filter": {
+        "hypothesis": "Skip entries on days IHSG close < MA20 or daily return < -1%. Expect fewer trades, higher WR.",
+        "change": "market_regime.py: add ihsg_entry_ok column. signal_combiner.py: gate BUY on ihsg_entry_ok.",
+        "result": {
+            "trades": 42, "win_rate": "40.5%", "pnl": "Rp +137M", "pf": 2.33,
+            "total_return": "13.73%", "max_drawdown": "-3.39%",
+            "sharpe": 1.02, "sortino": 1.76, "calmar": 4.32, "exposure": "69.7%",
+        },
+        "vs_baseline": "PF 2.14→2.33, WR +2.7pp, return +Rp 10M, Sharpe 0.89→1.02, Calmar 4.16→4.32. "
+                       "DD marginally worse (-3.28%→-3.39%, noise). Trades 45→42.",
+        "verdict": "ACCEPTED. All key metrics improved. Filter removes losing entries on weak IHSG days. "
+                   "This is the new v10 baseline.",
+        "run_id": "23982879523",
+        "date": "2026-04-04",
+    },
+    "exp1_emergency_stop_10pct": {
+        "hypothesis": "Tighter emergency stop (-10% vs -12%) reduces worst losses without killing winners.",
+        "change": "config.py emergency_stop_pct: 0.12 → 0.10",
+        "result": {
+            "trades": 45, "win_rate": "37.8%", "pnl": "Rp +111M", "pf": 1.88,
+            "total_return": "11.08%", "max_drawdown": "-3.81%",
+            "sharpe": 0.70, "sortino": 1.20, "calmar": 3.11, "exposure": "70.4%",
+        },
+        "vs_baseline": "PF 2.14→1.88, return -Rp 16M, DD worse (-3.28%→-3.81%), Calmar 4.16→3.11.",
+        "verdict": "REJECTED. -10% stop clips winners that dip temporarily during the 5-day hold. "
+                   "-12% is correctly calibrated. Reverted.",
+        "run_id": "23982773904",
+        "date": "2026-04-04",
+    },
+}
+
+# ══════════════════════════════════════════════════════════════
+# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-04-05)
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
@@ -266,8 +317,19 @@ IN_PROGRESS = """
    - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
 2. 2024 BROKER DATA — IN PROGRESS 🔄
-   - Q1 batch 1 (2024-01-01 to 2024-03-01, tickers 1–25): RUNNING (GH run 23958438367, Apr 4 2026)
-   - Remaining: batch 2→3→batch4-split for Q1, then Q2→Q3→Q4 sequentially
+   - Q1 2024: COMPLETE ✅ — 58 trading days, 1,043,576→1,292,222 (+248,646 records)
+     - batch 1 (tickers 1–25):  runs 23958438367 + 23967693713 ✅
+     - batch 2 (tickers 26–50): run 23970243812 ✅
+     - batch 3 (tickers 51–74): run 23977448331 ✅
+     - batch 4 pt1 (Jan 1→Feb 15, tickers 75+): run 23982135534 ✅
+     - batch 4 pt2 (Feb 16→Mar 31, tickers 75+): run 23989786558 ✅
+     - export_summary: run 23994101016 ✅
+     - update_split_files: run 23995260146 ✅ — split 490,967 + 801,255 = 1,292,222
+   - Q2 2024: IN PROGRESS 🔄
+     - batch 1 (tickers 1–25, Apr 1→Jun 30): RUNNING (run 23995308646, Apr 5 2026)
+     - batch 2→3→batch4-split pending
+   - Q3 2024: pending
+   - Q4 2024: pending
    - After each quarter: export_summary.yml → update_split_files.yml
 
 3. PRICE DATA ✅
@@ -288,13 +350,13 @@ IN_PROGRESS = """
 """
 
 # ══════════════════════════════════════════════════════════════
-# DATABASE STATE (verified 2026-04-01)
+# DATABASE STATE (verified 2026-04-05)
 # ══════════════════════════════════════════════════════════════
 
 DATABASE_STATE = """
 File: idx_swing_trader.db (SQLite)
-broker_summary record count: 1,043,576
-broker_summary date range: 2025-01-02 → 2025-12-31
+broker_summary record count: 1,292,222
+broker_summary date range: 2024-01-02 → 2025-12-30
 Unique tickers in broker_summary: 109 | Unique broker codes: 95
 Unique tickers in daily_prices: 107 (PTRO and NIKL backfilled via run_backtest.yml self-heal)
 
@@ -598,7 +660,31 @@ IMMEDIATE — NEXT UP:
   4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
   After each quarter: export_summary.yml → update_split_files.yml
 
-AFTER 2024 BACKFILL:
+IMMEDIATE — PARALLEL TRACKS:
+  Track A: 2024 broker data backfill (scraper running, sequential batches)
+    1. Q1 2024: ✅ COMPLETE — 58 days, +248,646 records, split files updated (Apr 5 2026)
+    2. Q2 2024: 🔄 batch 1 RUNNING (run 23995308646, 2024-04-01→2024-06-30, tickers 1–25)
+               ⬜ batch 2 (tickers 26–50, Apr 1→Jun 30)
+               ⬜ batch 3 (tickers 51–74, Apr 1→Jun 30)
+               ⬜ batch 4 pt1 (tickers 75+, Apr 1→May 15)
+               ⬜ batch 4 pt2 (tickers 75+, May 15→Jun 30)
+               ⬜ export_summary.yml → update_split_files.yml
+    3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
+    4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
+    After each quarter: export_summary.yml → update_split_files.yml
+
+  Track B: v10 experiments on feature/v10-experiments branch (one per session)
+    v9 baseline: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
+    Always test: 2025-01-01→2025-12-31 | capital=1B | real_broker=true
+    Trigger: gh workflow run run_backtest.yml --ref feature/v10-experiments ...
+
+    ✅ Exp 1: REJECTED — Emergency stop -10% (run 23982773904)
+    ✅ Exp 2: ACCEPTED — IHSG market filter (run 23982879523) — new baseline PF 2.33
+    ✅ Exp 3: REJECTED — FF magnitude filter (run 23982978951)
+    ⬜ Exp 4a: Support/resistance detection + break-below-support exit — ON HOLD
+    ⬜ Exp 4b: Averaging up on resistance break — ON HOLD (depends on 4a)
+
+AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
   5. Re-run backtest for 2024 with real_broker=true
   6. Compare 2024 real vs synthetic (-37M) — expect improvement
   7. Run combined 2024+2025 backtest for full picture
@@ -612,10 +698,21 @@ INTEGRATION & IMPROVEMENT:
   10. Update daily_signals.yml to include live broker scraping each day
   11. Paper trade 1 month → go live
 
+COMPLETED (April 5, 2026):
+  ✅ 2024 Q1 broker backfill COMPLETE — all 6 batch runs done, +248,646 records
+  ✅ export_summary.yml confirmed 58 trading days, 1,292,222 total records (run 23994101016)
+  ✅ update_split_files.yml — split 490,967 + 801,255 = 1,292,222, pushed to main (run 23995260146)
+  ✅ 2024 Q2 batch 1 triggered (run 23995308646, 2024-04-01→2024-06-30, tickers 1–25)
+
 COMPLETED (April 4, 2026):
   ✅ v9 GitHub Actions re-run confirmed — identical results (run 23958174058)
   ✅ 2024 Q1 broker scrape batch 1 triggered (run 23958438367, 2024-01-01→2024-03-01)
   ✅ Trade log downloaded locally: reports/latest/trade_log.csv
+  ✅ feature/v10-experiments branch created and pushed
+  ✅ run_backtest.yml: idx-database upload gated to main branch only
+  ✅ Exp 1 REJECTED (emergency stop -10%): PF 2.14→1.88, return -Rp 16M (run 23982773904)
+  ✅ Exp 2 ACCEPTED (IHSG market filter): PF 2.14→2.33, +Rp 10M, Sharpe +0.13 (run 23982879523)
+  ✅ Exp 3 REJECTED (FF magnitude filter): PF 2.33→2.25, all metrics declined (run 23982978951)
 
 COMPLETED (April 3, 2026):
   ✅ v9: 4 structural fixes (warmup, gap-up filter, emergency -12%, cluster limit)
