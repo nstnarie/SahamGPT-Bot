@@ -257,6 +257,26 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp4_trend_exit_cooldown": {
+        "hypothesis": "After TREND_EXIT (+15%+ gain), block re-entry for 30 trading days. "
+                      "Stock is at risk of exhaustion/distribution after a big move. "
+                      "EMTK re-entered 17 trading days after TREND_EXIT → -Rp 7.9M emergency stop.",
+        "change": "engine.py: cooldown now triggers on STOP_LOSS OR TREND_EXIT (was STOP_LOSS only). "
+                  "Reuses existing stop_loss_cooldown_days=30 config value.",
+        "result": {
+            "trades": 41, "win_rate": "41.5%", "pnl": "Rp +145M", "pf": 2.52,
+            "total_return": "14.55%", "max_drawdown": "-3.37%",
+            "sharpe": 1.11, "sortino": 1.93, "calmar": 4.59, "exposure": "69.7%",
+        },
+        "vs_baseline": "vs Exp 2 baseline (42t, 40.5% WR, PF 2.33, +Rp 137M, Calmar 4.32): "
+                       "PF +0.19, WR +1.0pp, return +Rp 8M, Sharpe +0.09, Calmar +0.27. "
+                       "EMTK Oct re-entry eliminated (-Rp 7.9M emergency stop gone). All metrics improved.",
+        "verdict": "ACCEPTED. All metrics improved. 30-day cooldown is the right duration for 2025 data. "
+                   "⚠️ Re-test cooldown duration (30d) once full 2024 broker data is available — "
+                   "2024 may have different re-entry patterns. New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59.",
+        "run_id": "24005616009",
+        "date": "2026-04-05",
+    },
     "exp3_ff_magnitude_filter": {
         "hypothesis": "Require 5-day FF sum > 1.5x 20-day avg absolute flow. Only enter on abnormally strong accumulation.",
         "change": "signal_combiner.py: added ff_magnitude_ok as third condition in ff_full_confirm.",
@@ -304,7 +324,7 @@ V10_EXPERIMENTS = {
 }
 
 # ══════════════════════════════════════════════════════════════
-# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-04-05)
+# WHAT'S IN PROGRESS RIGHT NOW (as of 2026-04-01)
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
@@ -317,23 +337,8 @@ IN_PROGRESS = """
    - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
 2. 2024 BROKER DATA — IN PROGRESS 🔄
-   - Q1 2024: COMPLETE ✅ — 58 trading days, 1,043,576→1,292,222 (+248,646 records)
-     - batch 1 (tickers 1–25):  runs 23958438367 + 23967693713 ✅
-     - batch 2 (tickers 26–50): run 23970243812 ✅
-     - batch 3 (tickers 51–74): run 23977448331 ✅
-     - batch 4 pt1 (Jan 1→Feb 15, tickers 75+): run 23982135534 ✅
-     - batch 4 pt2 (Feb 16→Mar 31, tickers 75+): run 23989786558 ✅
-     - export_summary: run 23994101016 ✅
-     - update_split_files: run 23995260146 ✅ — split 490,967 + 801,255 = 1,292,222
-   - Q2 2024: IN PROGRESS 🔄
-     - batch 1 (tickers 1–25, Apr 1→Jun 30): COMPLETE ✅ (run 23995308646)
-     - batch 2 (tickers 26–50, Apr 1→Jun 30): COMPLETE ✅ (run 23999239806)
-     - batch 3 (tickers 51–74, Apr 1→Jun 30): RUNNING 🔄 (run 24003326023, Apr 5 2026)
-     - batch 4 pt1 (tickers 75+, Apr 1→May 15): pending
-     - batch 4 pt2 (tickers 75+, May 15→Jun 30): pending
-     - export_summary + update_split_files: pending
-   - Q3 2024: pending
-   - Q4 2024: pending
+   - Q1 batch 1 (2024-01-01 to 2024-03-01, tickers 1–25): RUNNING (GH run 23958438367, Apr 4 2026)
+   - Remaining: batch 2→3→batch4-split for Q1, then Q2→Q3→Q4 sequentially
    - After each quarter: export_summary.yml → update_split_files.yml
 
 3. PRICE DATA ✅
@@ -354,13 +359,13 @@ IN_PROGRESS = """
 """
 
 # ══════════════════════════════════════════════════════════════
-# DATABASE STATE (verified 2026-04-05)
+# DATABASE STATE (verified 2026-04-01)
 # ══════════════════════════════════════════════════════════════
 
 DATABASE_STATE = """
 File: idx_swing_trader.db (SQLite)
-broker_summary record count: 1,292,222
-broker_summary date range: 2024-01-02 → 2025-12-30
+broker_summary record count: 1,043,576
+broker_summary date range: 2025-01-02 → 2025-12-31
 Unique tickers in broker_summary: 109 | Unique broker codes: 95
 Unique tickers in daily_prices: 107 (PTRO and NIKL backfilled via run_backtest.yml self-heal)
 
@@ -656,27 +661,23 @@ WEAK_SPOTS = """
 # ══════════════════════════════════════════════════════════════
 
 NEXT_STEPS = """
-IMMEDIATE — NEXT UP:
-  Backfill 2024 full year broker data. Refresh Stockbit token before each session.
-  1. Q1 2024: ✅ batch 1 triggered (2024-01-01→2024-03-01) | batch 2→3→batch4-split pending
-  2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
-  3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
-  4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
-  After each quarter: export_summary.yml → update_split_files.yml
+⚠️ BRANCH ISOLATION RULE (active while 2024 broker scraper is running):
+  All code experiments must run on branch: feature/v10-experiments
+  Do NOT commit experimental code to main.
+  Do NOT trigger run_backtest.yml from main.
+  Reason: scrape_broker_summary.yml is actively writing to idx-database.
+  run_backtest.yml on main uploads idx-database with overwrite=true — this
+  would clobber the scraper's work if run while scraping is in progress.
+  The feature branch workflow is read-only for idx-database (upload step
+  is gated: if: always() && github.ref == 'refs/heads/main').
 
 IMMEDIATE — PARALLEL TRACKS:
   Track A: 2024 broker data backfill (scraper running, sequential batches)
-    1. Q1 2024: ✅ COMPLETE — 58 days, +248,646 records, split files updated (Apr 5 2026)
-    2. Q2 2024: ✅ batch 1 done (run 23995308646)
-               ✅ batch 2 done (run 23999239806)
-               🔄 batch 3 RUNNING (run 24003326023, tickers 51–74, Apr 1→Jun 30)
-               ⬜ batch 4 pt1 (tickers 75+, Apr 1→May 15)
-               ⬜ batch 4 pt2 (tickers 75+, May 15→Jun 30)
-               ⬜ export_summary.yml → update_split_files.yml
-    3. Q3 2024: batches 1→2→3, then batch 4 per month: Jul → Aug → Sep
-    4. Q4 2024: batches 1→2→3, then batch 4 per month: Oct → Nov → Dec
+    1. Q1 2024: ✅ batch 1 triggered (2024-01-01→2024-03-01) | batch 2→3→batch4-split pending
+    2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
+    3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
+    4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
     After each quarter: export_summary.yml → update_split_files.yml
-    ⚠️ Batch 4 = 47 tickers after expansion — run per month (~2.2h), NOT per quarter (~6.7h > 6h limit)
 
   Track B: v10 experiments on feature/v10-experiments branch (one per session)
     v9 baseline: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
@@ -684,58 +685,33 @@ IMMEDIATE — PARALLEL TRACKS:
     Trigger: gh workflow run run_backtest.yml --ref feature/v10-experiments ...
 
     ✅ Exp 1: REJECTED — Emergency stop -10% (run 23982773904)
-    ✅ Exp 2: ACCEPTED — IHSG market filter (run 23982879523) — new baseline PF 2.33
+    ✅ Exp 2: ACCEPTED — IHSG market filter (run 23982879523) — baseline PF 2.33
     ✅ Exp 3: REJECTED — FF magnitude filter (run 23982978951)
-    ⬜ Exp 4 (NEXT after 2024 backfill complete): Remove Rp 150 min price filter
-             Hypothesis: real market observation found potential stocks trading below Rp 150
-             that would have been valid breakout setups. Test if removing the filter improves
-             trade count and return without degrading quality (PF, WR, DD).
-             File to change: signals/signal_combiner.py (min_price check)
-    ⬜ Exp 5a: Support/resistance detection for entry + exit — ON HOLD
-             Entry: only buy on historical resistance breakout (augments 60-day high)
-             Exit: break below support → stronger signal than fixed % stop
-    ⬜ Exp 5b: Averaging up on resistance break — ON HOLD (depends on 5a)
-    ⬜ Exp 5c: Chart pattern detection for signals — ON HOLD (depends on 5a)
-             Detect ascending triangle, H&S, IH&S, double bottom/top from 5a's structure
-             Use as entry/exit filters + IHSG trend detection. Conclusions only, no rendering
+    ✅ Exp 4: ACCEPTED — Post-TREND_EXIT cooldown 30d (run 24005616009)
+              PF 2.33→2.52, WR +1.0pp, return +Rp 8M, Sharpe +0.09, Calmar +0.27
+              New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59
+              ⚠️ Re-test 30d cooldown value once full 2024 data available
+    ⬜ Exp 4a: Support/resistance detection + break-below-support exit
+              Files: signals/signal_combiner.py, backtest/portfolio.py
+              Hypothesis: historical price clusters identify structural support levels
+    ⬜ Exp 4b: Averaging up on resistance break (only after 4a shows useful S/R levels)
+              Files: backtest/engine.py, backtest/portfolio.py
+              Note: engine rewrite required — position currently entered once, never added to
 
-AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION:
-  5. Add new tickers to LQ45_TICKERS in scraper/price_scraper.py (append to end → lands in batch 4)
-     Confirmed adds: BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG, AADI
-     (AADI: active IDX stock, IPO end of 2024 — limited history expected before that date)
-     Skipped for now: WIFI, MLPL (low liquidity, sparse Asing flow)
-     ⚠️ WARNING: After adding, batch 4 grows 34→47 tickers.
-        Per-month estimate: ~2.2h ✅ safe. Per-quarter: ~6.7h > 6h GHA limit.
-        Batch 4 MUST be run per month (not per quarter) for all future scrapes.
-  6. Run initial_scrape.yml — fetches OHLCV price history for all new tickers (Yahoo Finance)
-     Without this step, backtest/daily engine silently skips new tickers (PTRO/NIKL bug pattern)
-  7. Run scrape_broker_summary.yml with tickers override for historical backfill of new tickers:
-       -f tickers=BRIS,CUAN,BREN,... (comma-separated, overrides batch selection)
-       Scrape full range: 2024-01-01 → 2025-12-31 in quarterly chunks
-       skip_existing=True is safe — won't re-scrape already-stored dates
-     Note: BREN/CUAN/PANI/RATU listed 2022-2024, so 2024 Q1 data may be partial/missing — expected.
-     Note: DEWA likely sub-Rp 150 currently — filtered by price filter until Exp 4 runs.
-  8. After scraping: export_summary.yml → update_split_files.yml → push to main
-
-AFTER TICKER EXPANSION + 2024 BACKFILL:
-  9. Re-run backtest for 2024 with real_broker=true
-  10. Compare 2024 real vs synthetic (-37M) — expect improvement
-  11. Run combined 2024+2025 backtest for full picture
-
-INTEGRATION & IMPROVEMENT:
-  8. Integrate real broker data into signal_combiner.py (live signals)
-     - Replace synthetic ForeignFlow with real Asing net_value from broker_summary
-     - This is the LIVE path — test carefully before deploying
-  9. Fix 6–10 day stop-loss weak spot (54 trades, 8% WR, -215M)
-     Use broker accumulation signal to decide hold vs exit
-  10. Update daily_signals.yml to include live broker scraping each day
+AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
+  5. Re-run backtest for 2024 with real_broker=true
+  6. Compare 2024 real vs synthetic (-37M) — expect improvement
+  7. Run combined 2024+2025 backtest for full picture
+  8. Merge feature/v10-experiments → main via PR
+  9. Integrate into live path (main_daily.py → signal_combiner.py)
+  10. Update daily_signals.yml with live broker scraping
   11. Paper trade 1 month → go live
 
 COMPLETED (April 5, 2026):
-  ✅ 2024 Q1 broker backfill COMPLETE — all 6 batch runs done, +248,646 records
-  ✅ export_summary.yml confirmed 58 trading days, 1,292,222 total records (run 23994101016)
-  ✅ update_split_files.yml — split 490,967 + 801,255 = 1,292,222, pushed to main (run 23995260146)
-  ✅ 2024 Q2 batch 1 triggered (run 23995308646, 2024-04-01→2024-06-30, tickers 1–25)
+  ✅ Exp 4 ACCEPTED — post-TREND_EXIT cooldown 30d (run 24005616009)
+     PF 2.33→2.52 | WR +1pp | +Rp 8M | Calmar 4.32→4.59
+     Eliminates EMTK Oct re-entry (-Rp 7.9M emergency stop)
+     ⚠️ Re-test 30d cooldown value with full 2024 data
 
 COMPLETED (April 4, 2026):
   ✅ v9 GitHub Actions re-run confirmed — identical results (run 23958174058)
@@ -743,9 +719,6 @@ COMPLETED (April 4, 2026):
   ✅ Trade log downloaded locally: reports/latest/trade_log.csv
   ✅ feature/v10-experiments branch created and pushed
   ✅ run_backtest.yml: idx-database upload gated to main branch only
-  ✅ Exp 1 REJECTED (emergency stop -10%): PF 2.14→1.88, return -Rp 16M (run 23982773904)
-  ✅ Exp 2 ACCEPTED (IHSG market filter): PF 2.14→2.33, +Rp 10M, Sharpe +0.13 (run 23982879523)
-  ✅ Exp 3 REJECTED (FF magnitude filter): PF 2.33→2.25, all metrics declined (run 23982978951)
 
 COMPLETED (April 3, 2026):
   ✅ v9: 4 structural fixes (warmup, gap-up filter, emergency -12%, cluster limit)
