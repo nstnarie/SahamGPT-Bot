@@ -267,8 +267,10 @@ class BacktestEngine:
                     )
                     completed_trades.append(trade)
 
-                    # Cooldown after stop-loss
-                    if exit_reason == "STOP_LOSS":
+                    # Cooldown after stop-loss OR trend exit
+                    # TREND_EXIT: stock just made a big move (+15%+) — rest before re-entry.
+                    # Pattern 2: EMTK re-entered 17 trading days after TREND_EXIT → emergency stop.
+                    if exit_reason in ("STOP_LOSS", "TREND_EXIT"):
                         cooldown_days = self.config.exit.stop_loss_cooldown_days
                         future_idx = min(i + cooldown_days, len(trading_dates) - 1)
                         cooldown_until[ticker] = trading_dates[future_idx]
