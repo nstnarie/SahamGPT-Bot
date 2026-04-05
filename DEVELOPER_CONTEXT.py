@@ -257,6 +257,26 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp6_ihsg_5d_momentum": {
+        "hypothesis": "Exp 2 single-day IHSG check passes during multi-day rollovers. "
+                      "Requiring IHSG 5d return > 0 filters entries during sustained weakness. "
+                      "Target: Apr-May 2025 losing cluster (-Rp 27.8M, 7 straight stops).",
+        "change": "market_regime.py: added ihsg_5d_return > 0 as third condition in ihsg_entry_ok.",
+        "result": {
+            "trades": 36, "win_rate": "36.1%", "pnl": "Rp +77M", "pf": 1.86,
+            "total_return": "7.68%", "max_drawdown": "-5.22%",
+            "sharpe": 0.33, "sortino": 0.64, "calmar": 1.55, "exposure": "57.1%",
+        },
+        "vs_baseline": "vs Exp 4 baseline (41t, 41.5% WR, PF 2.52, +Rp 145M, Calmar 4.59): "
+                       "catastrophic. PF -0.66, WR -5.4pp, return -Rp 68M, Calmar -3.04. "
+                       "5-day lookback too backward-looking — blocks big winners (TINS, PTRO, EMTK) "
+                       "that break out at the START of a recovery before 5d return turns positive.",
+        "verdict": "REJECTED. 5-day IHSG momentum is too restrictive. The best breakouts happen "
+                   "at the beginning of recoveries, exactly when 5d return is still negative. "
+                   "The single-day IHSG filter (Exp 2) is already the right granularity.",
+        "run_id": "24006068747",
+        "date": "2026-04-05",
+    },
     "exp5_remove_rp150_filter": {
         "hypothesis": "Real market observation found sub-Rp 150 stocks with valid breakout setups "
                       "being silently excluded. Removing filter may improve trade count and return.",
@@ -717,14 +737,10 @@ IMMEDIATE — PARALLEL TRACKS:
 
     ── From v9 Trade Log Loss Analysis (28 losses, -Rp 103M total) ──
 
-    ⬜ Exp 6: IHSG multi-day momentum filter
-              File: signals/market_regime.py (add ihsg_momentum_ok column)
-              Hypothesis: Exp 2 checks IHSG on a single day (close > MA20, daily > -1%).
-              But the Apr-May 2025 losing cluster (-Rp 27.8M, 7 consecutive losses) happened
-              during a multi-day IHSG rollover that passed single-day checks. Adding a 5-day
-              or 10-day IHSG momentum condition (e.g. IHSG 5d return > 0) should filter
-              entries made during broader market weakness that single-day checks miss.
-              Pattern source: Trades #1-8 (Apr 25–May 19 entries, all losers)
+    ✅ Exp 6: REJECTED — IHSG 5-day momentum filter (run 24006068747)
+              PF 2.52→1.86, WR -5.4pp, return -Rp 68M, Calmar 4.59→1.55.
+              Too backward-looking — best breakouts start recoveries when 5d return still negative.
+              Single-day IHSG filter (Exp 2) is already the right granularity.
 
     ⬜ Exp 7: Sector-specific entry limit (Financial Services)
               File: backtest/engine.py (extend cluster limit to be sector-aware)
