@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 5, 2026 (v13 — 2024 Q1 broker backfill complete, Q2 batch 1 running)
+> Last updated: April 5, 2026 (v13 — 2024 Q1 complete, Q2 batches 1+2 done, batch 3 running)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -74,11 +74,16 @@ All 6 batch runs completed successfully. All runs status: success.
 - `idx_broker_part_b.db`: unchanged (2025 data)
 - Committed to main: `d188a73`
 
-### 2024 Q2 Batch 1 — TRIGGERED 🔄
-- Run ID: 23995308646 — `scrape_broker_summary.yml`
-- Parameters: `start_date=2024-04-01`, `end_date=2024-06-30`, `batch=1` (tickers 1–25)
-- Status: running as of session end
-- **Stockbit token renewed this morning (Apr 5) — valid**
+### 2024 Q2 Broker Backfill — IN PROGRESS 🔄
+| Run | Batch | Tickers | Status |
+|-----|-------|---------|--------|
+| 23995308646 | 1 | 1–25 | ✅ Done |
+| 23999239806 | 2 | 26–50 | ✅ Done |
+| 24003326023 | 3 | 51–74 | 🔄 Running (~4h, started Apr 5) |
+| TBD | 4 pt1 | 75+, Apr 1→May 15 | ⬜ |
+| TBD | 4 pt2 | 75+, May 15→Jun 30 | ⬜ |
+
+- **Stockbit token renewed Apr 5 morning — refresh again before batch 4**
 
 ---
 
@@ -168,9 +173,9 @@ Refresh Stockbit token before each session. One batch at a time, sequential.
 Q1 2024: ✅ COMPLETE (all batches + export + split files updated)
 
 Q2 2024:
-  🔄 batch 1 RUNNING (2024-04-01→2024-06-30, tickers 1–25, run 23995308646)
-  ⬜ batch 2 (2024-04-01→2024-06-30, tickers 26–50)
-  ⬜ batch 3 (2024-04-01→2024-06-30, tickers 51–74)
+  ✅ batch 1 done (run 23995308646, tickers 1–25)
+  ✅ batch 2 done (run 23999239806, tickers 26–50)
+  🔄 batch 3 RUNNING (run 24003326023, tickers 51–74)
   ⬜ batch 4 pt1 (2024-04-01→2024-05-15, tickers 76+)
   ⬜ batch 4 pt2 (2024-05-15→2024-06-30, tickers 76+)
   ⬜ export_summary.yml → verify → update_split_files.yml

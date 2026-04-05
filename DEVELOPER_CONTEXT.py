@@ -326,8 +326,12 @@ IN_PROGRESS = """
      - export_summary: run 23994101016 ✅
      - update_split_files: run 23995260146 ✅ — split 490,967 + 801,255 = 1,292,222
    - Q2 2024: IN PROGRESS 🔄
-     - batch 1 (tickers 1–25, Apr 1→Jun 30): RUNNING (run 23995308646, Apr 5 2026)
-     - batch 2→3→batch4-split pending
+     - batch 1 (tickers 1–25, Apr 1→Jun 30): COMPLETE ✅ (run 23995308646)
+     - batch 2 (tickers 26–50, Apr 1→Jun 30): COMPLETE ✅ (run 23999239806)
+     - batch 3 (tickers 51–74, Apr 1→Jun 30): RUNNING 🔄 (run 24003326023, Apr 5 2026)
+     - batch 4 pt1 (tickers 75+, Apr 1→May 15): pending
+     - batch 4 pt2 (tickers 75+, May 15→Jun 30): pending
+     - export_summary + update_split_files: pending
    - Q3 2024: pending
    - Q4 2024: pending
    - After each quarter: export_summary.yml → update_split_files.yml
@@ -663,9 +667,9 @@ IMMEDIATE — NEXT UP:
 IMMEDIATE — PARALLEL TRACKS:
   Track A: 2024 broker data backfill (scraper running, sequential batches)
     1. Q1 2024: ✅ COMPLETE — 58 days, +248,646 records, split files updated (Apr 5 2026)
-    2. Q2 2024: 🔄 batch 1 RUNNING (run 23995308646, 2024-04-01→2024-06-30, tickers 1–25)
-               ⬜ batch 2 (tickers 26–50, Apr 1→Jun 30)
-               ⬜ batch 3 (tickers 51–74, Apr 1→Jun 30)
+    2. Q2 2024: ✅ batch 1 done (run 23995308646)
+               ✅ batch 2 done (run 23999239806)
+               🔄 batch 3 RUNNING (run 24003326023, tickers 51–74, Apr 1→Jun 30)
                ⬜ batch 4 pt1 (tickers 75+, Apr 1→May 15)
                ⬜ batch 4 pt2 (tickers 75+, May 15→Jun 30)
                ⬜ export_summary.yml → update_split_files.yml
