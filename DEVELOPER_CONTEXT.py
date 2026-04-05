@@ -257,6 +257,24 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp5_remove_rp150_filter": {
+        "hypothesis": "Real market observation found sub-Rp 150 stocks with valid breakout setups "
+                      "being silently excluded. Removing filter may improve trade count and return.",
+        "change": "signal_combiner.py: removed (df['close'] >= min_price) from is_breakout conditions.",
+        "result": {
+            "trades": 43, "win_rate": "39.5%", "pnl": "Rp +125M", "pf": 2.09,
+            "total_return": "12.52%", "max_drawdown": "-4.29%",
+            "sharpe": 0.86, "sortino": 1.48, "calmar": 3.11, "exposure": "69.7%",
+        },
+        "vs_baseline": "vs Exp 4 baseline (41t, 41.5% WR, PF 2.52, +Rp 145M, Calmar 4.59): "
+                       "PF -0.43, WR -2.0pp, return -Rp 20M, DD worse (-3.37%→-4.29%), Calmar -1.48. "
+                       "2 new trades unlocked: WTON (Jun 16) and GOTO (Nov 11) — BOTH emergency stops. "
+                       "Sub-Rp 150 stocks are too volatile — hit -12% before any exit fires.",
+        "verdict": "REJECTED. Rp 150 filter does real work — not filtering junk arbitrarily but "
+                   "specifically blocking stocks volatile enough to produce emergency stops. Keep Rp 150.",
+        "run_id": "24005950325",
+        "date": "2026-04-05",
+    },
     "exp4_trend_exit_cooldown": {
         "hypothesis": "After TREND_EXIT (+15%+ gain), block re-entry for 30 trading days. "
                       "Stock is at risk of exhaustion/distribution after a big move. "
@@ -692,11 +710,10 @@ IMMEDIATE — PARALLEL TRACKS:
               New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59
               ⚠️ Re-test 30d cooldown value once full 2024 data available
 
-    ⬜ Exp 5: Remove Rp 150 min price filter — NEXT (after 2024 backfill complete)
-              File: signals/signal_combiner.py (min_price check in _add_breakout_signals)
-              Hypothesis: real market observation found sub-Rp 150 stocks with valid breakout
-              setups (e.g. DEWA). Test if removing the filter improves trade count and return
-              without degrading quality (PF, WR, DD).
+    ✅ Exp 5: REJECTED — Remove Rp 150 min price filter (run 24005950325)
+              PF 2.52→2.09, WR -2pp, return -Rp 20M, DD worse, Calmar 4.59→3.11.
+              2 new sub-Rp 150 trades (WTON, GOTO) both hit EMERGENCY_STOP immediately.
+              Rp 150 filter correctly excludes stocks too volatile for the strategy.
 
     ── From v9 Trade Log Loss Analysis (28 losses, -Rp 103M total) ──
 
