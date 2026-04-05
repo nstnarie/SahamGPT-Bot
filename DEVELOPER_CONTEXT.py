@@ -685,12 +685,17 @@ IMMEDIATE — PARALLEL TRACKS:
     ✅ Exp 1: REJECTED — Emergency stop -10% (run 23982773904)
     ✅ Exp 2: ACCEPTED — IHSG market filter (run 23982879523) — new baseline PF 2.33
     ✅ Exp 3: REJECTED — FF magnitude filter (run 23982978951)
-    ⬜ Exp 4a: Support/resistance detection for entry + exit — ON HOLD
+    ⬜ Exp 4 (NEXT after 2024 backfill complete): Remove Rp 150 min price filter
+             Hypothesis: real market observation found potential stocks trading below Rp 150
+             that would have been valid breakout setups. Test if removing the filter improves
+             trade count and return without degrading quality (PF, WR, DD).
+             File to change: signals/signal_combiner.py (min_price check)
+    ⬜ Exp 5a: Support/resistance detection for entry + exit — ON HOLD
              Entry: only buy on historical resistance breakout (augments 60-day high)
              Exit: break below support → stronger signal than fixed % stop
-    ⬜ Exp 4b: Averaging up on resistance break — ON HOLD (depends on 4a)
-    ⬜ Exp 4c: Chart pattern detection for signals — ON HOLD (depends on 4a)
-             Detect ascending triangle, H&S, IH&S, double bottom/top from 4a's structure
+    ⬜ Exp 5b: Averaging up on resistance break — ON HOLD (depends on 5a)
+    ⬜ Exp 5c: Chart pattern detection for signals — ON HOLD (depends on 5a)
+             Detect ascending triangle, H&S, IH&S, double bottom/top from 5a's structure
              Use as entry/exit filters + IHSG trend detection. Conclusions only, no rendering
 
 AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
