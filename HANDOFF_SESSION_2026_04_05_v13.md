@@ -185,7 +185,20 @@ Q4 2024: batch1 → batch2 → batch3 → batch4 (Oct 1–Nov 15) → batch4 (No
 ```
 After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
 
-### AFTER 2024 BACKFILL
+### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION
+1. Add to `LQ45_TICKERS` in `scraper/price_scraper.py` (append to end):
+   - **Confirmed:** BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG
+   - **Verify first:** AADI (confirm actively traded on IDX)
+   - **Skipped:** WIFI, MLPL (low liquidity, sparse Asing flow)
+2. Run `initial_scrape.yml` — fetch OHLCV for new tickers (without this they're silently skipped)
+3. Run `scrape_broker_summary.yml` with `tickers=BRIS,CUAN,...` override, 2024-01-01 → 2025-12-31
+4. `export_summary.yml` → `update_split_files.yml` → push to main
+
+⚠️ **Batch 4 size warning:** Adding 12 tickers grows batch 4 from 34 → 46 tickers.
+Full-quarter estimate: ~6.6h > 6h GitHub Actions limit.
+Future quarterly scrapes must split batch 4 into **3 date-range parts** instead of 2.
+
+### AFTER TICKER EXPANSION + 2024 BACKFILL
 - Run `run_backtest.yml` real_broker=true, 2024-01-01 to 2024-12-31
 - Compare vs synthetic: 45 trades, 33% WR, -Rp 37M, PF 0.68
 - Run combined 2024+2025

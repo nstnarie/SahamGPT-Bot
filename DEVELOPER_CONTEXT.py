@@ -698,10 +698,28 @@ IMMEDIATE — PARALLEL TRACKS:
              Detect ascending triangle, H&S, IH&S, double bottom/top from 5a's structure
              Use as entry/exit filters + IHSG trend detection. Conclusions only, no rendering
 
-AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
-  5. Re-run backtest for 2024 with real_broker=true
-  6. Compare 2024 real vs synthetic (-37M) — expect improvement
-  7. Run combined 2024+2025 backtest for full picture
+AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION:
+  5. Add new tickers to LQ45_TICKERS in scraper/price_scraper.py (append to end → lands in batch 4)
+     Confirmed adds: BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG
+     Pending verification: AADI (confirm actively traded on IDX before adding)
+     Skipped for now: WIFI, MLPL (low liquidity, sparse Asing flow)
+     ⚠️ WARNING: After adding, batch 4 grows 34→46 tickers.
+        Full-quarter batch 4 estimate: ~6.6h > 6h GHA limit.
+        Future quarterly scrapes must split batch 4 into 3 date-range parts.
+  6. Run initial_scrape.yml — fetches OHLCV price history for all new tickers (Yahoo Finance)
+     Without this step, backtest/daily engine silently skips new tickers (PTRO/NIKL bug pattern)
+  7. Run scrape_broker_summary.yml with tickers override for historical backfill of new tickers:
+       -f tickers=BRIS,CUAN,BREN,... (comma-separated, overrides batch selection)
+       Scrape full range: 2024-01-01 → 2025-12-31 in quarterly chunks
+       skip_existing=True is safe — won't re-scrape already-stored dates
+     Note: BREN/CUAN/PANI/RATU listed 2022-2024, so 2024 Q1 data may be partial/missing — expected.
+     Note: DEWA likely sub-Rp 150 currently — filtered by price filter until Exp 4 runs.
+  8. After scraping: export_summary.yml → update_split_files.yml → push to main
+
+AFTER TICKER EXPANSION + 2024 BACKFILL:
+  9. Re-run backtest for 2024 with real_broker=true
+  10. Compare 2024 real vs synthetic (-37M) — expect improvement
+  11. Run combined 2024+2025 backtest for full picture
 
 INTEGRATION & IMPROVEMENT:
   8. Integrate real broker data into signal_combiner.py (live signals)
