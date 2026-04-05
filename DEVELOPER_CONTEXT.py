@@ -673,9 +673,10 @@ IMMEDIATE — PARALLEL TRACKS:
                ⬜ batch 4 pt1 (tickers 75+, Apr 1→May 15)
                ⬜ batch 4 pt2 (tickers 75+, May 15→Jun 30)
                ⬜ export_summary.yml → update_split_files.yml
-    3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
-    4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
+    3. Q3 2024: batches 1→2→3, then batch 4 per month: Jul → Aug → Sep
+    4. Q4 2024: batches 1→2→3, then batch 4 per month: Oct → Nov → Dec
     After each quarter: export_summary.yml → update_split_files.yml
+    ⚠️ Batch 4 = 47 tickers after expansion — run per month (~2.2h), NOT per quarter (~6.7h > 6h limit)
 
   Track B: v10 experiments on feature/v10-experiments branch (one per session)
     v9 baseline: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
@@ -700,12 +701,12 @@ IMMEDIATE — PARALLEL TRACKS:
 
 AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION:
   5. Add new tickers to LQ45_TICKERS in scraper/price_scraper.py (append to end → lands in batch 4)
-     Confirmed adds: BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG
-     Pending verification: AADI (confirm actively traded on IDX before adding)
+     Confirmed adds: BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG, AADI
+     (AADI: active IDX stock, IPO end of 2024 — limited history expected before that date)
      Skipped for now: WIFI, MLPL (low liquidity, sparse Asing flow)
-     ⚠️ WARNING: After adding, batch 4 grows 34→46 tickers.
-        Full-quarter batch 4 estimate: ~6.6h > 6h GHA limit.
-        Future quarterly scrapes must split batch 4 into 3 date-range parts.
+     ⚠️ WARNING: After adding, batch 4 grows 34→47 tickers.
+        Per-month estimate: ~2.2h ✅ safe. Per-quarter: ~6.7h > 6h GHA limit.
+        Batch 4 MUST be run per month (not per quarter) for all future scrapes.
   6. Run initial_scrape.yml — fetches OHLCV price history for all new tickers (Yahoo Finance)
      Without this step, backtest/daily engine silently skips new tickers (PTRO/NIKL bug pattern)
   7. Run scrape_broker_summary.yml with tickers override for historical backfill of new tickers:
