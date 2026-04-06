@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 6, 2026 (v15 — Exp 4 accepted, Exp 5-7 rejected, baseline PF 2.52)
+> Last updated: April 6, 2026 (v15 — Q2 2024 scraping complete, ticker universe expanded to 136, all experiments ON HOLD pending full data)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -122,11 +122,13 @@ Safe while scraper runs — idx-database upload gated: `if: always() && github.r
 
 ## 5. Database State
 
-- **broker_summary:** 1,292,222 records, 2024-01-02 → 2025-12-30
-- **Q1 2024:** COMPLETE ✅ — 58 trading days, all 109 tickers, split files updated
-- **Q2 2024:** batches 1+2 done, batch 3 RUNNING (run 24003326023)
-- **daily_prices:** 107 tickers, 2021-01-01 to 2026-03-28
-- **Split files:** `idx_broker_part_a.db` (490,967) + `idx_broker_part_b.db` (801,255) = 1,292,222 ✅
+- **broker_summary:** 1,518,834 records, 2024-01-02 → 2025-12-30
+- **Q1 2024:** COMPLETE ✅ — 58 trading days, all 109 tickers
+- **Q2 2024:** COMPLETE ✅ (Apr 6, 2026) — all 4 batches done, export + split files updated
+- **Q3 2024:** ⬜ pending
+- **Q4 2024:** ⬜ pending
+- **daily_prices:** 107 tickers, 2021-01-01 to 2026-03-28 (136 new tickers not yet scraped)
+- **Split files:** `idx_broker_part_a.db` (717,579) + `idx_broker_part_b.db` (801,255) = 1,518,834 ✅
 
 ---
 
@@ -148,21 +150,26 @@ All workflows touching idx-database must run **sequentially, never in parallel.*
 
 ## 7. Next Steps (in order)
 
-### IMMEDIATE — Complete Q2 2024 Backfill
+### ⚠️ EXPERIMENT STRATEGY — IMPORTANT DECISION (Apr 6, 2026)
+All v10 experiments (Exp 8, 9, 10 and any re-tests) are **ON HOLD** until the full dataset is ready:
+- Full 2024 broker summary data (Q3 + Q4 still pending)
+- Full 2025 broker summary data (already complete)
+- Price + broker data for 27 new tickers (initial_scrape + scrape_broker_summary pending)
+- Then: re-run ALL experiments (including re-tests of Exp 4, 7) against the complete 2024+2025 universe
+
+Reason: results on partial/old-universe data will be invalidated once the full dataset is ready. No point running Exp 8–10 twice.
+
+### IMMEDIATE — Complete 2024 Broker Data Backfill (109 original tickers)
 ```
-Q2 2024:
-  ✅ batch 1 done (run 23995308646, tickers 1–25)
-  ✅ batch 2 done (run 23999239806, tickers 26–50)
-  🔄 batch 3 RUNNING (run 24003326023, tickers 51–74) — verify complete first
-  ⬜ Refresh Stockbit token
-  ⬜ batch 4 pt1 (2024-04-01→2024-05-15, tickers 75+)
-  ⬜ batch 4 pt2 (2024-05-15→2024-06-30, tickers 75+)
-  ⬜ export_summary.yml → verify → update_split_files.yml
+Q1 2024: ✅ COMPLETE
+Q2 2024: ✅ COMPLETE (Apr 6, 2026) — 1,518,834 total records, split files updated
 
 Q3 2024: batch1 → batch2 → batch3 → batch4 Jul → batch4 Aug → batch4 Sep
 Q4 2024: batch1 → batch2 → batch3 → batch4 Oct → batch4 Nov → batch4 Dec
 ```
-⚠️ Batch 4 = 47 tickers (old universe) — with 136 tickers, batch 4 grows — **always run per month, NOT per quarter**
+After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
+
+⚠️ Batch 4 now covers 136 tickers — always run per month (~2–3h), NOT per quarter
 
 ### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION ✅ (scraper/price_scraper.py updated Apr 6)
 LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + liquidity check (yfinance, 30d avg):
@@ -182,26 +189,28 @@ LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + l
 
 ### v10 EXPERIMENTS — STATUS
 
-**Current baseline (post Exp 4): 41t | 41.5% WR | PF 2.52 | +Rp 145M | DD -3.37% | Calmar 4.59**
+> ⚠️ **ALL PENDING EXPERIMENTS ON HOLD** — Will redo the entire experiment suite once the full dataset is ready: 2024+2025 broker summary + price data for all 136 tickers. Results on partial/old-universe data will be invalidated.
+
+**Current baseline (post Exp 4, 2025 data only, 109 tickers): 41t | 41.5% WR | PF 2.52 | +Rp 145M | DD -3.37% | Calmar 4.59**
 
 | # | Experiment | Status |
 |---|------------|--------|
-| ~~1~~ | Emergency stop -12% → -10% | ❌ REJECTED (run 23982773904) |
-| ~~2~~ | IHSG market filter (daily) | ✅ ACCEPTED (run 23982879523) |
-| ~~3~~ | FF magnitude filter | ❌ REJECTED (run 23982978951) |
-| ~~4~~ | Post-TREND_EXIT cooldown 30d | ✅ ACCEPTED (run 24005616009) ⚠️ re-test 30d with 2024 data |
-| ~~5~~ | Remove Rp 150 min price filter | ❌ REJECTED (run 24005950325) — WTON+GOTO both emergency stopped |
-| ~~6~~ | IHSG 5d momentum filter | ❌ REJECTED (run 24006068747) — too backward-looking |
-| ~~7~~ | Financial sector entry limit | ❌ REJECTED (run 24006206306) — no effect, re-test with 2024+2025 |
-| **8** | Breakout margin filter (close ≥1-2% above 60d high) | ⬜ NEXT |
-| **9** | Early no-follow-through exit (no +1% by day 8) | ⬜ |
-| **10** | ATR/price volatility cap (ATR > 5% of close → skip) | ⬜ |
-| 7a | Support/resistance detection | ⬜ ON HOLD |
+| ~~1~~ | Emergency stop -12% → -10% | ❌ REJECTED (run 23982773904) — re-test on full data |
+| ~~2~~ | IHSG market filter (daily) | ✅ ACCEPTED (run 23982879523) — re-test on full data |
+| ~~3~~ | FF magnitude filter | ❌ REJECTED (run 23982978951) — re-test on full data |
+| ~~4~~ | Post-TREND_EXIT cooldown 30d | ✅ ACCEPTED (run 24005616009) — re-test on full data |
+| ~~5~~ | Remove Rp 150 min price filter | ❌ REJECTED (run 24005950325) — likely stays rejected |
+| ~~6~~ | IHSG 5d momentum filter | ❌ REJECTED (run 24006068747) — likely stays rejected |
+| ~~7~~ | Financial sector entry limit | ❌ REJECTED (run 24006206306) — re-test on full data (may fire in 2024) |
+| **8** | Breakout margin filter (close ≥1-2% above 60d high) | ⏸ ON HOLD — pending full data |
+| **9** | Early no-follow-through exit (no +1% by day 8) | ⏸ ON HOLD — pending full data |
+| **10** | ATR/price volatility cap (ATR > 5% of close → skip) | ⏸ ON HOLD — pending full data |
+| 7a | Support/resistance detection | ⬜ ON HOLD (post-integration) |
 | 7b | Averaging up on resistance break | ⬜ ON HOLD (needs 7a) |
 | 7c | Chart pattern detection | ⬜ ON HOLD (needs 7a) |
 
-### INTEGRATION (after 2024 backfill + all experiments done)
-- Merge `feature/v10-experiments` → `main` (Exp 2 + Exp 4 accepted changes)
+### INTEGRATION (after full data + experiment re-run complete)
+- Merge `feature/v10-experiments` → `main` (accepted experiments only)
 - Run `run_backtest.yml` from main to confirm stable post-merge
 - Integrate into live path (`main_daily.py → signal_combiner.py`)
 - Update `daily_signals.yml` with live broker scraping

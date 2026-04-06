@@ -375,8 +375,12 @@ IN_PROGRESS = """
    - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
 2. 2024 BROKER DATA — IN PROGRESS 🔄
-   - Q1 batch 1 (2024-01-01 to 2024-03-01, tickers 1–25): RUNNING (GH run 23958438367, Apr 4 2026)
-   - Remaining: batch 2→3→batch4-split for Q1, then Q2→Q3→Q4 sequentially
+   - Q1 2024: COMPLETE ✅
+   - Q2 2024: COMPLETE ✅ (Apr 6, 2026) — 1,518,834 total records, split files updated
+               part_a: 717,579 records (2024-01-02→2025-03-27)
+               part_b: 801,255 records (2025-04-08→2025-12-30)
+   - Q3 2024: ⬜ pending
+   - Q4 2024: ⬜ pending
    - After each quarter: export_summary.yml → update_split_files.yml
 
 3. PRICE DATA ✅
@@ -411,10 +415,15 @@ IN_PROGRESS = """
 
 DATABASE_STATE = """
 File: idx_swing_trader.db (SQLite)
-broker_summary record count: 1,043,576
-broker_summary date range: 2025-01-02 → 2025-12-31
-Unique tickers in broker_summary: 109 | Unique broker codes: 95
-Unique tickers in daily_prices: 107 (PTRO and NIKL backfilled via run_backtest.yml self-heal)
+broker_summary record count: 1,518,834 (as of Apr 6, 2026 — Q1+Q2 2024 + full 2025)
+broker_summary date range: 2024-01-02 → 2025-12-30
+Unique tickers in broker_summary: 109 (original universe — new 27 tickers not yet scraped)
+Unique tickers in daily_prices: 107 (136-ticker price scrape not yet run for new tickers)
+
+Split files (as of Apr 6, 2026):
+  idx_broker_part_a.db: 717,579 records | 2024-01-02 → 2025-03-27
+  idx_broker_part_b.db: 801,255 records | 2025-04-08 → 2025-12-30
+  Total: 1,518,834 ✅
 
 Tables: broker_summary, stocks, daily_prices, foreign_flow,
         corporate_actions, index_daily, signal_log
@@ -758,7 +767,15 @@ IMMEDIATE — PARALLEL TRACKS:
               ⚠️ Re-test with full 2024+2025 data — bank clustering may be more common
               in a fuller dataset. Idea is sound but 2025 alone doesn't expose it.
 
-    ⬜ Exp 8: Breakout margin filter (require close X% above 60-day high)
+    ── ALL PENDING EXPERIMENTS ON HOLD (Apr 6, 2026 decision) ──
+    ⚠️ Will redo the ENTIRE experiment suite once the full dataset is ready:
+       - Full 2024 broker summary data for 109 original tickers (Q3+Q4 still pending)
+       - Full 2025 broker summary data (already complete)
+       - Price + broker data for 27 new tickers (initial_scrape + scrape_broker_summary pending)
+       Then: re-run ALL experiments (including Exp 1–7 re-tests) on 2024+2025 combined, 136-ticker universe.
+       Reason: results on partial/old-universe data will be invalidated once the full dataset is ready.
+
+    ⏸ Exp 8: Breakout margin filter (require close X% above 60-day high)
               File: signals/signal_combiner.py (_add_breakout_signals)
               Hypothesis: current filter passes any close > 60d high, even by 0.1%.
               Marginal breakouts (barely above resistance) fail more often than strong ones.
@@ -767,7 +784,7 @@ IMMEDIATE — PARALLEL TRACKS:
               but improve WR and PF.
               Pattern source: Emergency stop trades (ESSA, HRUM, EMTK Oct) — marginal entries
 
-    ⬜ Exp 9: Early no-follow-through exit
+    ⏸ Exp 9: Early no-follow-through exit
               File: backtest/portfolio.py (check_exit_conditions)
               Hypothesis: 6 TIME_EXIT losses held 15-18 days with only -1% to -3.9% loss
               (-Rp 11.1M combined). These stocks never moved after the breakout. If a stock
@@ -776,7 +793,7 @@ IMMEDIATE — PARALLEL TRACKS:
               Risk: may clip slow-starters that eventually move. Watch carefully.
               Pattern source: Trades #8, #17, #24, #25, #26, #28
 
-    ⬜ Exp 10: ATR/price volatility cap
+    ⏸ Exp 10: ATR/price volatility cap
               File: signals/signal_combiner.py or config.py
               Hypothesis: stocks with ATR/price > ~5% are too whippy — normal daily moves
               regularly trigger stops before the trend develops. The emergency stops (ESSA,
