@@ -385,8 +385,17 @@ IN_PROGRESS = """
    - PTRO and NIKL were initially missing from daily_prices despite being in
      broker_summary. Fixed via self-healing backfill step in run_backtest.yml.
 
-4. TICKER UNIVERSE ✅ (as of 2026-03-28)
-   - 109 unique tickers (added PTRO, NIKL; removed 8 duplicates)
+4. TICKER UNIVERSE — EXPANDED (as of 2026-04-06)
+   - 136 unique tickers in LQ45_TICKERS (was 109 as of 2026-03-28)
+   - 27 new tickers added Apr 6 2026 (scraper/price_scraper.py):
+     Batch 1 (high-liquidity): AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB, RAJA, RATU, WIFI
+     Batch 2 (additional screening): ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA,
+                                      DOID, ENRG, IMAS, KRAS, POWR, SMBR, SMDR, WIIM
+   - Excluded (sub-Rp150): MLPL(91), ABBA(44), ACST(98), BKSL(108)
+   - Excluded (too thin <Rp1B/day): AMAR(0.11), CMNP(0.37), IMAS excluded then re-added by user,
+     MCAS(0.13) — IMAS, ARGO, BNBA added despite thin volume by user decision
+   - ENRG shows unusual price (1500) in yfinance — verify manually before scraping
+   - Pending: initial_scrape.yml + scrape_broker_summary.yml for 27 new tickers after 2024 backfill
 
 5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v9)
    - 2025 full year with real Asing flow: 45 trades, 37.8% WR, PF 2.14, +Rp 127M
@@ -794,14 +803,21 @@ IMMEDIATE — PARALLEL TRACKS:
               Hypothesis: detect ascending triangle, H&S, IH&S, double bottom/top from 7a's
               S/R structure. Use as entry/exit filters + IHSG trend detection. Conclusions only.
 
+AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION (27 new tickers in LQ45_TICKERS):
+  5a. Run initial_scrape.yml — fetch OHLCV 2021-01-01→present for all 27 new tickers
+  5b. Run scrape_broker_summary.yml with tickers override, date range 2024-01-01→2025-12-31
+      (run sequentially, one batch at a time — idx-database shared artifact)
+  5c. export_summary.yml → verify counts → update_split_files.yml → push to main
+  ⚠️ Verify ENRG price manually before scraping — yfinance shows unusual Rp 1500 close
+
 AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
-  5. Re-run backtest for 2024 with real_broker=true
-  6. Compare 2024 real vs synthetic (-37M) — expect improvement
-  7. Run combined 2024+2025 backtest for full picture
-  8. Merge feature/v10-experiments → main via PR
-  9. Integrate into live path (main_daily.py → signal_combiner.py)
-  10. Update daily_signals.yml with live broker scraping
-  11. Paper trade 1 month → go live
+  6. Re-run backtest for 2024 with real_broker=true
+  7. Compare 2024 real vs synthetic (-37M) — expect improvement
+  8. Run combined 2024+2025 backtest for full picture (now 136 tickers)
+  9. Merge feature/v10-experiments → main via PR
+  10. Integrate into live path (main_daily.py → signal_combiner.py)
+  11. Update daily_signals.yml with live broker scraping
+  12. Paper trade 1 month → go live
 
 COMPLETED (April 5, 2026):
   ✅ Exp 4 ACCEPTED — post-TREND_EXIT cooldown 30d (run 24005616009)
