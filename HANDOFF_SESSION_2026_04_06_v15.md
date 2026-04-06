@@ -162,14 +162,23 @@ Q2 2024:
 Q3 2024: batch1 → batch2 → batch3 → batch4 Jul → batch4 Aug → batch4 Sep
 Q4 2024: batch1 → batch2 → batch3 → batch4 Oct → batch4 Nov → batch4 Dec
 ```
-⚠️ Batch 4 = 47 tickers after expansion — **run per month (~2.2h), NOT per quarter (~6.7h)**
+⚠️ Batch 4 = 47 tickers (old universe) — with 136 tickers, batch 4 grows — **always run per month, NOT per quarter**
 
-### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION
-1. Add 13 tickers to `LQ45_TICKERS` in `scraper/price_scraper.py`:
-   BRIS, CUAN, BREN, PANI, ADHI, PSAB, RAJA, DEWA, RATU, DCII, BNLI, TAPG, AADI
-2. Run `initial_scrape.yml` — OHLCV for new tickers
-3. Run `scrape_broker_summary.yml` with tickers override, 2024-01-01 → 2025-12-31
-4. `export_summary.yml` → `update_split_files.yml` → push to main
+### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION ✅ (scraper/price_scraper.py updated Apr 6)
+LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + liquidity check (yfinance, 30d avg):
+
+**Batch 1 (high-liquidity):** AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB, RAJA, RATU, WIFI
+
+**Batch 2 (additional screening):** ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS, KRAS, POWR, SMBR, SMDR, WIIM
+
+**Not added:** MLPL(Rp91), ABBA(Rp44), ACST(Rp98), BKSL(Rp108) — sub-Rp150 / AMAR, CMNP, MCAS — too thin (<Rp1B/day)
+
+⚠️ **ENRG: verify price manually** — yfinance shows Rp 1500 (historically ~Rp 100-200). May be split-adjusted.
+
+**Remaining steps after 2024 backfill:**
+1. `initial_scrape.yml` — OHLCV 2021-01-01→present for 27 new tickers
+2. `scrape_broker_summary.yml` with tickers override, 2024-01-01→2025-12-31 (sequential batches)
+3. `export_summary.yml` → `update_split_files.yml` → push to main
 
 ### v10 EXPERIMENTS — STATUS
 
