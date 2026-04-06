@@ -717,124 +717,56 @@ WEAK_SPOTS = """
 # ══════════════════════════════════════════════════════════════
 
 NEXT_STEPS = """
-⚠️ BRANCH ISOLATION RULE (active while 2024 broker scraper is running):
+⚠️ BRANCH ISOLATION RULE:
   All code experiments must run on branch: feature/v10-experiments
   Do NOT commit experimental code to main.
-  Do NOT trigger run_backtest.yml from main.
-  Reason: scrape_broker_summary.yml is actively writing to idx-database.
-  run_backtest.yml on main uploads idx-database with overwrite=true — this
-  would clobber the scraper's work if run while scraping is in progress.
-  The feature branch workflow is read-only for idx-database (upload step
-  is gated: if: always() && github.ref == 'refs/heads/main').
+  Do NOT trigger run_backtest.yml from main while scraper is active.
+  scraper/price_scraper.py on main = 109 tickers (original).
+  scraper/price_scraper.py on feature = 136 tickers (with expansion).
 
-IMMEDIATE — PARALLEL TRACKS:
-  Track A: 2024 broker data backfill (scraper running, sequential batches)
-    1. Q1 2024: ✅ batch 1 triggered (2024-01-01→2024-03-01) | batch 2→3→batch4-split pending
-    2. Q2 2024: batches 1→2→3, then batch 4 split: Apr 1–May 15, May 15–Jun 30
-    3. Q3 2024: batches 1→2→3, then batch 4 split: Jul 1–Aug 15, Aug 15–Sep 30
-    4. Q4 2024: batches 1→2→3, then batch 4 split: Oct 1–Nov 15, Nov 15–Dec 31
-    After each quarter: export_summary.yml → update_split_files.yml
+══════════════════════════════════════════════════════════════
+ORDERED EXECUTION PLAN (do in sequence, do not skip steps)
+══════════════════════════════════════════════════════════════
 
-  Track B: v10 experiments on feature/v10-experiments branch (one per session)
-    v9 baseline: 45 trades | 37.8% WR | PF 2.14 | +Rp 127M | DD -3.28% | Calmar 4.16
-    Always test: 2025-01-01→2025-12-31 | capital=1B | real_broker=true
-    Trigger: gh workflow run run_backtest.yml --ref feature/v10-experiments ...
+STEP 1 — Complete 2024 broker data backfill (original 109 tickers) ⬜
+  Q1 2024: ✅ COMPLETE
+  Q2 2024: ✅ COMPLETE (Apr 6, 2026)
+  Q3 2024: ⬜ batch1 → batch2 → batch3 → batch4 Jul → batch4 Aug → batch4 Sep
+  Q4 2024: ⬜ batch1 → batch2 → batch3 → batch4 Oct → batch4 Nov → batch4 Dec
+  After each quarter: export_summary.yml → update_split_files.yml
 
-    ✅ Exp 1: REJECTED — Emergency stop -10% (run 23982773904)
-    ✅ Exp 2: ACCEPTED — IHSG market filter (run 23982879523) — baseline PF 2.33
-    ✅ Exp 3: REJECTED — FF magnitude filter (run 23982978951)
-    ✅ Exp 4: ACCEPTED — Post-TREND_EXIT cooldown 30d (run 24005616009)
-              PF 2.33→2.52, WR +1.0pp, return +Rp 8M, Sharpe +0.09, Calmar +0.27
-              New baseline: 41t | 41.5% WR | PF 2.52 | +Rp 145M | Calmar 4.59
-              ⚠️ Re-test 30d cooldown value once full 2024 data available
+STEP 2 — Scrape additional 27 tickers (price + broker data) ⬜
+  2a. Merge scraper/price_scraper.py (136 tickers) from feature → main
+  2b. Run initial_scrape.yml — OHLCV 2021-01-01→present for 27 new tickers
+  2c. Run scrape_broker_summary.yml with custom tickers override, 2024-01-01→2025-12-31
+      (sequential batches, use tickers= override not batch number)
+  2d. export_summary.yml → update_split_files.yml → verify total
+  ⚠️ Verify ENRG price manually on Stockbit before scraping — yfinance shows unusual Rp 1500
 
-    ✅ Exp 5: REJECTED — Remove Rp 150 min price filter (run 24005950325)
-              PF 2.52→2.09, WR -2pp, return -Rp 20M, DD worse, Calmar 4.59→3.11.
-              2 new sub-Rp 150 trades (WTON, GOTO) both hit EMERGENCY_STOP immediately.
-              Rp 150 filter correctly excludes stocks too volatile for the strategy.
+STEP 3 — Re-run ALL v10 experiments on full dataset ⬜
+  Dataset: 2024-01-01→2025-12-31 | 136 tickers | real_broker=true
+  All prior experiment results (Exp 1–7) were on 2025-only, 109-ticker data.
+  Re-test everything from scratch. Exp 5 (Rp 150 filter) likely stays rejected.
 
-    ── From v9 Trade Log Loss Analysis (28 losses, -Rp 103M total) ──
+  Experiments queued (one per session, on feature/v10-experiments):
+    ⏸ Exp 1 re-test: Emergency stop -12% → -10%
+    ⏸ Exp 2 re-test: IHSG market filter (currently accepted — confirm holds)
+    ⏸ Exp 3 re-test: FF magnitude filter
+    ⏸ Exp 4 re-test: Post-TREND_EXIT cooldown 30d (currently accepted — confirm holds)
+    ⏸ Exp 5 re-test: Remove Rp 150 min price filter (expect rejected again)
+    ⏸ Exp 6 re-test: IHSG 5d momentum filter (expect rejected again)
+    ⏸ Exp 7 re-test: Financial sector entry limit (may fire now with 2024 data)
+    ⏸ Exp 8: Breakout margin filter (close ≥1–2% above 60d high) — signals/signal_combiner.py
+    ⏸ Exp 9: Early no-follow-through exit (no +1% by day 8) — backtest/portfolio.py
+    ⏸ Exp 10: ATR/price volatility cap (ATR > 5% of close → skip) — signals/signal_combiner.py
+    ⬜ Exp 7a/7b/7c: S/R detection, averaging up, chart patterns — ON HOLD (post-integration)
 
-    ✅ Exp 6: REJECTED — IHSG 5-day momentum filter (run 24006068747)
-              PF 2.52→1.86, WR -5.4pp, return -Rp 68M, Calmar 4.59→1.55.
-              Too backward-looking — best breakouts start recoveries when 5d return still negative.
-              Single-day IHSG filter (Exp 2) is already the right granularity.
-
-    ✅ Exp 7: REJECTED — Financial Services sector entry limit (run 24006206306)
-              Zero effect — identical results to baseline (41t, PF 2.52, +Rp 145M).
-              Root cause: 4 bank entries in 2025 are in May, Jul, Aug, Nov — never within
-              the same 10-day window. Limit never fires on 2025 data.
-              ⚠️ Re-test with full 2024+2025 data — bank clustering may be more common
-              in a fuller dataset. Idea is sound but 2025 alone doesn't expose it.
-
-    ── ALL PENDING EXPERIMENTS ON HOLD (Apr 6, 2026 decision) ──
-    ⚠️ Will redo the ENTIRE experiment suite once the full dataset is ready:
-       - Full 2024 broker summary data for 109 original tickers (Q3+Q4 still pending)
-       - Full 2025 broker summary data (already complete)
-       - Price + broker data for 27 new tickers (initial_scrape + scrape_broker_summary pending)
-       Then: re-run ALL experiments (including Exp 1–7 re-tests) on 2024+2025 combined, 136-ticker universe.
-       Reason: results on partial/old-universe data will be invalidated once the full dataset is ready.
-
-    ⏸ Exp 8: Breakout margin filter (require close X% above 60-day high)
-              File: signals/signal_combiner.py (_add_breakout_signals)
-              Hypothesis: current filter passes any close > 60d high, even by 0.1%.
-              Marginal breakouts (barely above resistance) fail more often than strong ones.
-              Require close to be at least 1–2% above the 60-day high to confirm the
-              resistance is genuinely broken and not just noise. May reduce trade count
-              but improve WR and PF.
-              Pattern source: Emergency stop trades (ESSA, HRUM, EMTK Oct) — marginal entries
-
-    ⏸ Exp 9: Early no-follow-through exit
-              File: backtest/portfolio.py (check_exit_conditions)
-              Hypothesis: 6 TIME_EXIT losses held 15-18 days with only -1% to -3.9% loss
-              (-Rp 11.1M combined). These stocks never moved after the breakout. If a stock
-              hasn't gained at least +1% by day 8 (after the 5-day hold), it has no momentum
-              and is tying up capital. Exit early to redeploy into stronger setups.
-              Risk: may clip slow-starters that eventually move. Watch carefully.
-              Pattern source: Trades #8, #17, #24, #25, #26, #28
-
-    ⏸ Exp 10: ATR/price volatility cap
-              File: signals/signal_combiner.py or config.py
-              Hypothesis: stocks with ATR/price > ~5% are too whippy — normal daily moves
-              regularly trigger stops before the trend develops. The emergency stops (ESSA,
-              HRUM) were both high-volatility small-caps. Adding a maximum ATR/price ratio
-              filter (e.g., skip if ATR > 5% of close) would exclude inherently unstable
-              stocks while keeping steady trend candidates.
-              Pattern source: Emergency stop trades (-Rp 25.1M from 3 trades)
-
-    ── ON HOLD (complex — do after integration) ──
-
-    ⬜ Exp 7a: Support/resistance detection for entry + exit
-              Files: signals/signal_combiner.py, backtest/engine.py, backtest/portfolio.py
-              Hypothesis: historical price clusters identify structural support levels.
-              Entry: only buy on confirmed resistance breakout (augments 60-day high).
-              Exit: break below support → stronger signal than fixed % stop.
-
-    ⬜ Exp 7b: Averaging up on resistance break — ON HOLD (needs 7a)
-              Files: backtest/engine.py, backtest/portfolio.py
-              Hypothesis: if stock breaks next resistance level while held, add to position.
-              Note: engine rewrite required — position currently entered once, never added to.
-
-    ⬜ Exp 7c: Chart pattern detection — ON HOLD (needs 7a)
-              Files: signals/signal_combiner.py, backtest/engine.py
-              Hypothesis: detect ascending triangle, H&S, IH&S, double bottom/top from 7a's
-              S/R structure. Use as entry/exit filters + IHSG trend detection. Conclusions only.
-
-AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION (27 new tickers in LQ45_TICKERS):
-  5a. Run initial_scrape.yml — fetch OHLCV 2021-01-01→present for all 27 new tickers
-  5b. Run scrape_broker_summary.yml with tickers override, date range 2024-01-01→2025-12-31
-      (run sequentially, one batch at a time — idx-database shared artifact)
-  5c. export_summary.yml → verify counts → update_split_files.yml → push to main
-  ⚠️ Verify ENRG price manually before scraping — yfinance shows unusual Rp 1500 close
-
-AFTER 2024 BACKFILL + ACCEPTED v10 EXPERIMENTS:
-  6. Re-run backtest for 2024 with real_broker=true
-  7. Compare 2024 real vs synthetic (-37M) — expect improvement
-  8. Run combined 2024+2025 backtest for full picture (now 136 tickers)
-  9. Merge feature/v10-experiments → main via PR
-  10. Integrate into live path (main_daily.py → signal_combiner.py)
-  11. Update daily_signals.yml with live broker scraping
-  12. Paper trade 1 month → go live
+STEP 4 — Integration ⬜
+  4a. Merge feature/v10-experiments → main (accepted experiments only)
+  4b. Run run_backtest.yml from main — confirm stable post-merge
+  4c. Integrate into live path (main_daily.py → signal_combiner.py)
+  4d. Update daily_signals.yml with live broker scraping
+  4e. Paper trade 1 month → go live
 
 COMPLETED (April 5, 2026):
   ✅ Exp 4 ACCEPTED — post-TREND_EXIT cooldown 30d (run 24005616009)
