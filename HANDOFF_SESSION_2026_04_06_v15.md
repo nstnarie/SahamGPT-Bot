@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 6, 2026 (v15 — Q2 2024 scraping complete, ticker universe expanded to 136, all experiments ON HOLD pending full data)
+> Last updated: April 8, 2026 (v15 — Q3 2024 complete, Q4 batch 1 running, INET queued for future addition)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -122,13 +122,13 @@ Safe while scraper runs — idx-database upload gated: `if: always() && github.r
 
 ## 5. Database State
 
-- **broker_summary:** 1,518,834 records, 2024-01-02 → 2025-12-30
-- **Q1 2024:** COMPLETE ✅ — 58 trading days, all 109 tickers
-- **Q2 2024:** COMPLETE ✅ (Apr 6, 2026) — all 4 batches done, export + split files updated
-- **Q3 2024:** ⬜ pending
-- **Q4 2024:** ⬜ pending
-- **daily_prices:** 107 tickers, 2021-01-01 to 2026-03-28 (136 new tickers not yet scraped)
-- **Split files:** `idx_broker_part_a.db` (717,579) + `idx_broker_part_b.db` (801,255) = 1,518,834 ✅
+- **broker_summary:** 1,805,857 records, 2024-01-02 → 2025-12-30
+- **Q1 2024:** COMPLETE ✅
+- **Q2 2024:** COMPLETE ✅ (Apr 6, 2026)
+- **Q3 2024:** COMPLETE ✅ (Apr 8, 2026) — split files updated
+- **Q4 2024:** 🔄 IN PROGRESS — batch 1 running (run 24111084856, 2024-10-01→2024-12-31)
+- **daily_prices:** 107 tickers, 2021-01-01 to 2026-03-28 (new tickers not yet scraped)
+- **Split files:** `idx_broker_part_a.db` (1,004,602) + `idx_broker_part_b.db` (801,255) = 1,805,857 ✅
 
 ---
 
@@ -162,10 +162,16 @@ Reason: results on partial/old-universe data will be invalidated once the full d
 ### IMMEDIATE — Complete 2024 Broker Data Backfill (109 original tickers)
 ```
 Q1 2024: ✅ COMPLETE
-Q2 2024: ✅ COMPLETE (Apr 6, 2026) — 1,518,834 total records, split files updated
+Q2 2024: ✅ COMPLETE (Apr 6, 2026) — 1,518,834 total records
+Q3 2024: ✅ COMPLETE (Apr 8, 2026) — 1,805,857 total records, split files updated
 
-Q3 2024: batch1 → batch2 → batch3 → batch4 Jul → batch4 Aug → batch4 Sep
-Q4 2024: batch1 → batch2 → batch3 → batch4 Oct → batch4 Nov → batch4 Dec
+Q4 2024: 🔄 batch 1 RUNNING (run 24111084856, 2024-10-01→2024-12-31)
+         ⬜ batch 2 (2024-10-01→2024-12-31)
+         ⬜ batch 3 (2024-10-01→2024-12-31)
+         ⬜ batch 4 Oct (2024-10-01→2024-10-31)
+         ⬜ batch 4 Nov (2024-11-01→2024-11-30)
+         ⬜ batch 4 Dec (2024-12-01→2024-12-31)
+         ⬜ export_summary.yml → update_split_files.yml
 ```
 After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
 
@@ -179,6 +185,8 @@ LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + l
 **Batch 2 (additional screening):** ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS, KRAS, POWR, SMBR, SMDR, WIIM
 
 **Not added:** MLPL(Rp91), ABBA(Rp44), ACST(Rp98), BKSL(Rp108) — sub-Rp150 / AMAR, CMNP, MCAS — too thin (<Rp1B/day)
+
+**Queued for future addition (not yet in code):** INET (Rp 258, Rp 106B/day ✅) — plus any other tickers Arie adds before Step 2 scraping begins
 
 ⚠️ **ENRG: verify price manually** — yfinance shows Rp 1500 (historically ~Rp 100-200). May be split-adjusted.
 
