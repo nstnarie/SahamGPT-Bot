@@ -377,10 +377,10 @@ IN_PROGRESS = """
 2. 2024 BROKER DATA — IN PROGRESS 🔄
    - Q1 2024: COMPLETE ✅
    - Q2 2024: COMPLETE ✅ (Apr 6, 2026) — 1,518,834 total records, split files updated
-               part_a: 717,579 records (2024-01-02→2025-03-27)
+   - Q3 2024: COMPLETE ✅ (Apr 8, 2026) — 1,805,857 total records, split files updated
+               part_a: 1,004,602 records (2024-01-02→2025-03-27)
                part_b: 801,255 records (2025-04-08→2025-12-30)
-   - Q3 2024: ⬜ pending
-   - Q4 2024: ⬜ pending
+   - Q4 2024: 🔄 IN PROGRESS — batch 1 running (run 24111084856, 2024-10-01→2024-12-31)
    - After each quarter: export_summary.yml → update_split_files.yml
 
 3. PRICE DATA ✅
@@ -390,16 +390,17 @@ IN_PROGRESS = """
      broker_summary. Fixed via self-healing backfill step in run_backtest.yml.
 
 4. TICKER UNIVERSE — EXPANDED (as of 2026-04-06)
-   - 136 unique tickers in LQ45_TICKERS (was 109 as of 2026-03-28)
-   - 27 new tickers added Apr 6 2026 (scraper/price_scraper.py):
-     Batch 1 (high-liquidity): AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB, RAJA, RATU, WIFI
-     Batch 2 (additional screening): ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA,
-                                      DOID, ENRG, IMAS, KRAS, POWR, SMBR, SMDR, WIIM
+   - feature/v10-experiments: 137 tickers (136 confirmed + INET pending addition to code)
+   - main: 109 tickers (original — stays until 2024 backfill complete)
+   - 27 tickers added to feature Apr 6 2026: AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB,
+     RAJA, RATU, WIFI, ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS,
+     KRAS, POWR, SMBR, SMDR, WIIM
+   - INET: ⬜ to be added to feature branch later (Rp 258, Rp 106B/day — solid liquidity)
+   - More additional tickers may be added before Step 2 scraping begins
    - Excluded (sub-Rp150): MLPL(91), ABBA(44), ACST(98), BKSL(108)
-   - Excluded (too thin <Rp1B/day): AMAR(0.11), CMNP(0.37), IMAS excluded then re-added by user,
-     MCAS(0.13) — IMAS, ARGO, BNBA added despite thin volume by user decision
-   - ENRG shows unusual price (1500) in yfinance — verify manually before scraping
-   - Pending: initial_scrape.yml + scrape_broker_summary.yml for 27 new tickers after 2024 backfill
+   - Excluded (too thin): AMAR(0.11), CMNP(0.37), MCAS(0.13)
+   - ENRG: verify price manually on Stockbit before scraping (yfinance shows unusual Rp 1500)
+   - Pending: initial_scrape.yml + scrape_broker_summary.yml for all new tickers after 2024 backfill
 
 5. REAL BROKER BACKTEST — COMPLETE ✅ (as of 2026-04-03, v9)
    - 2025 full year with real Asing flow: 45 trades, 37.8% WR, PF 2.14, +Rp 127M
