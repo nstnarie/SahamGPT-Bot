@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 8, 2026 (v15 — Q3 2024 complete, Q4 batch 1 running, INET queued for future addition)
+> Last updated: April 9, 2026 (v16 — 2024 backfill COMPLETE, split files updated, ready for Step 2)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -122,13 +122,13 @@ Safe while scraper runs — idx-database upload gated: `if: always() && github.r
 
 ## 5. Database State
 
-- **broker_summary:** 1,805,857 records, 2024-01-02 → 2025-12-30
+- **broker_summary:** 2,071,251 records, 2024-01-02 → 2025-12-30
 - **Q1 2024:** COMPLETE ✅
 - **Q2 2024:** COMPLETE ✅ (Apr 6, 2026)
-- **Q3 2024:** COMPLETE ✅ (Apr 8, 2026) — split files updated
-- **Q4 2024:** 🔄 IN PROGRESS — batch 1 running (run 24111084856, 2024-10-01→2024-12-31)
+- **Q3 2024:** COMPLETE ✅ (Apr 8, 2026)
+- **Q4 2024:** COMPLETE ✅ (Apr 9, 2026) — 5 runs, split files updated
 - **daily_prices:** 107 tickers, 2021-01-01 to 2026-03-28 (new tickers not yet scraped)
-- **Split files:** `idx_broker_part_a.db` (1,004,602) + `idx_broker_part_b.db` (801,255) = 1,805,857 ✅
+- **Split files:** `idx_broker_part_a.db` (1,269,996) + `idx_broker_part_b.db` (801,255) = 2,071,251 ✅
 
 ---
 
@@ -152,30 +152,28 @@ All workflows touching idx-database must run **sequentially, never in parallel.*
 
 ### ⚠️ EXPERIMENT STRATEGY — IMPORTANT DECISION (Apr 6, 2026)
 All v10 experiments (Exp 8, 9, 10 and any re-tests) are **ON HOLD** until the full dataset is ready:
-- Full 2024 broker summary data (Q3 + Q4 still pending)
-- Full 2025 broker summary data (already complete)
-- Price + broker data for 27 new tickers (initial_scrape + scrape_broker_summary pending)
-- Then: re-run ALL experiments (including re-tests of Exp 4, 7) against the complete 2024+2025 universe
+- ~~Full 2024 broker summary data~~ ✅ DONE (Apr 9, 2026)
+- Full 2025 broker summary data (already complete) ✅
+- Price + broker data for 27+ new tickers (initial_scrape + scrape_broker_summary pending) ⬜
+- Then: re-run ALL experiments (including re-tests of Exp 4, 7) against the complete 2024+2025 universe ⬜
 
 Reason: results on partial/old-universe data will be invalidated once the full dataset is ready. No point running Exp 8–10 twice.
 
-### IMMEDIATE — Complete 2024 Broker Data Backfill (109 original tickers)
+### ✅ COMPLETE — 2024 Broker Data Backfill (109 original tickers)
 ```
 Q1 2024: ✅ COMPLETE
 Q2 2024: ✅ COMPLETE (Apr 6, 2026) — 1,518,834 total records
 Q3 2024: ✅ COMPLETE (Apr 8, 2026) — 1,805,857 total records, split files updated
 
-Q4 2024: 🔄 batch 1 RUNNING (run 24111084856, 2024-10-01→2024-12-31)
-         ⬜ batch 2 (2024-10-01→2024-12-31)
-         ⬜ batch 3 (2024-10-01→2024-12-31)
-         ⬜ batch 4 Oct (2024-10-01→2024-10-31)
-         ⬜ batch 4 Nov (2024-11-01→2024-11-30)
-         ⬜ batch 4 Dec (2024-12-01→2024-12-31)
-         ⬜ export_summary.yml → update_split_files.yml
+Q4 2024: ✅ COMPLETE (Apr 9, 2026)
+         ✅ batch 1 (tickers 1-25, Oct 1→Dec 31) run 24111084856 — +79,207
+         ✅ batch 2 (tickers 26-50, Oct 1→Dec 31) run 24119625128 — +62,137
+         ✅ batch 3 (tickers 51-75, Oct 1→Dec 31) run 24131152829 — +53,737
+         ✅ batch 4 pt1 (tickers 76-109, Oct 1→Nov 15) run 24145458928 — +40,359
+         ✅ batch 4 pt2 (tickers 76-109, Nov 16→Dec 31) run 24153250161 — +29,954
+         ✅ export_summary.yml → update_split_files.yml (Apr 9, 2026)
 ```
-After each quarter: `export_summary.yml` → verify → `update_split_files.yml`
-
-⚠️ Batch 4 now covers 136 tickers — always run per month (~2–3h), NOT per quarter
+Final: **2,071,251 records** | part_a 1,269,996 + part_b 801,255 ✅
 
 ### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION ✅ (scraper/price_scraper.py updated Apr 6)
 LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + liquidity check (yfinance, 30d avg):
