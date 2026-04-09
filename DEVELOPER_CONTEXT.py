@@ -208,9 +208,9 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — v9 backtest complete (2025, PF 2.14, +Rp 127M, DD -3.28%). Next: 2024 broker data backfill."
+STATUS = "ACTIVE — feature/v10-experiments baseline confirmed on both 2024+2025 data. Next: scrape new 28 tickers then re-run all experiments on full 2024+2025 dataset."
 
-CURRENT_VERSION = "v9"
+CURRENT_VERSION = "v10-experiments (feature branch)"
 
 LATEST_BACKTEST_RESULTS = {
     "2025_synthetic": {
@@ -246,9 +246,28 @@ LATEST_BACKTEST_RESULTS = {
         "star_trade": "TINS: +Rp 54M (+118%) + PTRO: +Rp 38M (+45%) + EMTK: +Rp 32M (+77%)",
         "trend_exit": "8 trades, Rp +210M total",
     },
-    "2024": {
-        "trades": 45, "win_rate": "33%", "pnl": "Rp -37M", "pf": 0.68,
-        "note": "Synthetic FF only. Real broker data backfill pending.",
+    "2024_real_broker_v10exp": {
+        "trades": 42, "win_rate": "35.7%", "pnl": "Rp -60M", "pf": 0.47,
+        "total_return": "-6.05%", "max_drawdown": "-6.76%", "max_dd_days": 114,
+        "sharpe": -2.13, "sortino": -2.62, "calmar": -0.94,
+        "benchmark_max_dd": "-11.74%",
+        "note": "feature/v10-experiments, 109 tickers, real_broker=true (Apr 9, 2026). "
+                "2024 was a bear year for IDX. Strategy DD -6.76% vs IHSG -11.74% — "
+                "regime filter provided partial protection but not enough to stay flat. "
+                "Breakout/trend strategy naturally underperforms in downtrends. "
+                "Experiments 8-10 may help reduce false breakout entries in 2024.",
+        "run_id": "24171380283",
+    },
+    "2025_real_broker_v10exp": {
+        "trades": 41, "win_rate": "41.5%", "pnl": "Rp +145M", "pf": 2.52,
+        "total_return": "14.55%", "max_drawdown": "-3.37%", "max_dd_days": 51,
+        "sharpe": 1.11, "sortino": 1.93, "calmar": 4.59,
+        "benchmark_return": "20.71%", "benchmark_cagr": "22.10%", "benchmark_max_dd": "-17.76%",
+        "note": "feature/v10-experiments, 109 tickers, real_broker=true (Apr 9, 2026). "
+                "CONFIRMED BASELINE — matches handoff doc exactly. "
+                "Strong risk-adjusted performance: Calmar 4.59, Sharpe 1.11. "
+                "Max DD -3.37% vs benchmark -17.76% (5x better capital protection).",
+        "run_id": "24171709463",
     },
 }
 
@@ -687,6 +706,23 @@ KEY_LEARNINGS = """
     artifacts from the current run — silently returns nothing for previous
     runs. dawidd6/action-download-artifact@v6 correctly fetches the most
     recent artifact from any previous run. Always use v6.
+
+21. BACKFILL MUST CHECK BOTH DATE BOUNDS, NOT JUST LOWER BOUND
+    Discovered Apr 9 2026: run_backtest.yml "Backfill missing price data" step
+    used LEFT JOIN where daily_prices d WHERE d.ticker IS NULL — only caught
+    tickers with ZERO rows. Tickers with 2025-only data (from daily_signals)
+    passed the check, but main_backtest's upper-bound filter (date <= 2024-12-31)
+    correctly excluded those 2025 rows → "Loaded 2 stocks, IHSG: 0 days".
+    Fix: query now checks date >= warmup_start AND date <= end_date, so tickers
+    with out-of-range data are correctly detected and backfilled from Yahoo Finance.
+    Also added IHSG backfill block (same issue — index_daily had only 2025 data).
+
+22. ARTIFACT CHAIN RISK — DAILY SIGNALS OVERWRITES PRICE DATA RANGE
+    daily_signals.yml uploads idx-database artifact daily with ONLY today's prices.
+    If run_backtest.yml downloads this artifact and the backfill check only looks
+    at lower bound, it will think all tickers have data and skip backfill entirely.
+    Result: "Loaded 2 stocks" because all 107 tickers only have current-day prices.
+    Mitigation: the dual-bound backfill check (Learning 21) handles this automatically.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -694,22 +730,25 @@ KEY_LEARNINGS = """
 # ══════════════════════════════════════════════════════════════
 
 WEAK_SPOTS = """
-1. 6-10 DAY STOP-LOSSES (biggest remaining drag)
-   54 trades in this range: 8% win rate, -215M loss.
-   These survived the 5-day hold but got stopped in next week.
-   Fix: With real broker data, check if institutions still accumulating.
-   If yes, extend hold or widen stop.
+1. 2024 UNDERPERFORMANCE (-6.05%, PF 0.47)
+   Confirmed Apr 9, 2026 with real broker data (109 tickers).
+   The strategy is a breakout/momentum system — naturally struggles in downtrends.
+   IHSG had -11.74% max DD in 2024; strategy at -6.76% DD (better capital protection).
+   But -6.05% total return is still negative. Key candidates for investigation:
+   - Exp 8 (breakout margin ≥1-2%) — filters weaker breakouts, may cut false signals
+   - Exp 9 (early exit if no +1% by day 8) — eliminates dead money trades
+   - Exp 10 (ATR/price volatility cap) — skips high-vol stocks that fake breakout
 
-2. 2024 STILL SLIGHTLY NEGATIVE (-37M)
-   Fewer big trend winners in 2024 (3 vs 9 in 2025).
-   Could be market conditions, or 2024 broker data might improve entry timing.
-   Must backfill 2024 broker data and re-test before drawing conclusions.
+2. ALPHA STILL NEGATIVE vs IHSG in 2025
+   2025 real-broker (v10-exp): +14.55% vs IHSG +20.71%. Alpha = -6.16%.
+   Model protects capital well (max DD -3.37% vs IHSG -17.76%)
+   but can't match bull run. May need sector rotation or index exposure in BULL regime.
+   Needs more investigation after full 2024+2025 dataset experiments are complete.
 
-3. ALPHA STILL NEGATIVE vs IHSG
-   2025 real-broker: +7.30% vs IHSG +20.71%. Alpha = -13.99%.
-   Model protects capital well (max DD -2.82% vs IHSG -17.76%)
-   but can't match the bull run. May require sector rotation or
-   leverage to close the gap — needs more data before deciding.
+3. REGIME SENSITIVITY — STRATEGY IS DIRECTIONAL
+   2024: -6.05% | 2025: +14.55% — large swing driven by market regime.
+   The IHSG filter (Exp 2) helps but doesn't fully protect in sustained bear/sideways.
+   Consider: higher confidence threshold in BEAR regime, or partial exposure scaling.
 """
 
 # ══════════════════════════════════════════════════════════════
@@ -735,13 +774,18 @@ STEP 1 — Complete 2024 broker data backfill (original 109 tickers) ✅ COMPLET
   Q4 2024: ✅ COMPLETE (Apr 9, 2026) — 5 runs (batch1+2+3 full quarter, batch4 Oct-Nov15, Nov16-Dec31)
   Final: 2,071,251 records | 2024-01-02→2025-12-30 | part_a 1,269,996 + part_b 801,255 ✅
 
-STEP 2 — Scrape additional 27 tickers (price + broker data) ⬜
-  2a. Merge scraper/price_scraper.py (136 tickers) from feature → main
-  2b. Run initial_scrape.yml — OHLCV 2021-01-01→present for 27 new tickers
-  2c. Run scrape_broker_summary.yml with custom tickers override, 2024-01-01→2025-12-31
-      (sequential batches, use tickers= override not batch number)
-  2d. export_summary.yml → update_split_files.yml → verify total
+STEP 2 — Scrape additional 28 tickers (price + broker data) ⬜ IN PROGRESS (Apr 9, 2026)
+  2a. Merge scraper/price_scraper.py (137 tickers) from feature → main ⬜
+  2b. Run initial_scrape.yml — OHLCV 2021-01-01→present for 28 new tickers ⬜
+  2c. Run scrape_broker_summary.yml with custom tickers override, 2024-01-01→2025-12-31 ⬜
+      Sequential batches (use tickers= override not batch number).
+      Tickers: AADI,ADMR,BREN,BRIS,CUAN,DEWA,PANI,PSAB,RAJA,RATU,WIFI,
+               ADHI,AGRO,AMAN,ARGO,ARTO,ASSA,AVIA,BNBA,DOID,ENRG,IMAS,
+               KRAS,POWR,SMBR,SMDR,WIIM,INET
+  2d. export_summary.yml → update_split_files.yml → verify total ⬜
   ⚠️ Verify ENRG price manually on Stockbit before scraping — yfinance shows unusual Rp 1500
+  ⚠️ PARALLEL STRATEGY: 2c can run on main while experiments run on feature branch.
+     run_backtest.yml from feature does NOT upload idx-database — confirmed safe.
 
 STEP 3 — Re-run ALL v10 experiments on full dataset ⬜
   Dataset: 2024-01-01→2025-12-31 | 136 tickers | real_broker=true
