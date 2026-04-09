@@ -208,7 +208,7 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — Exp 11 REJECTED. 28-ticker scrape Run 1 in progress (main). Next: complete Runs 2-8 for 28 tickers, then implement Exp 8 (breakout margin filter)."
+STATUS = "ACTIVE — Exp 8 REJECTED. 28-ticker scrape Run 1 still in progress (main). Next: complete Runs 2-8 for 28 tickers, then implement Exp 9 (early no-follow-through exit)."
 
 CURRENT_VERSION = "v10-experiments (feature branch)"
 
@@ -276,6 +276,39 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp8_breakout_margin_filter": {
+        "hypothesis": "Require close >= 1.5% above 60-day high before confirming breakout. "
+                      "Targets 56% fakeout-reversal signature in 2024 losers: 15/27 trades "
+                      "entered on 1-tick resistance break, stopped at -3% to -7% within 6-10 days. "
+                      "Expected safe for 2025: TINS +118%, EMTK +77%, PTRO +45% had explosive "
+                      "day-1 momentum that easily clears 1.5%.",
+        "change": "config.py: added BreakoutConfig.breakout_margin_pct = 0.015. "
+                  "signals/signal_combiner.py: _add_breakout_signals() — changed "
+                  "is_breakout from `close > high_Nd` to `close > high_Nd * (1 + breakout_margin_pct)`.",
+        "result": {
+            "2024": {"trades": 30, "win_rate": "33.3%", "pnl": "Rp -81M", "pf": 0.23,
+                     "total_return": "-8.06%", "max_drawdown": "-8.70%", "sharpe": -2.62},
+            "2025": {"trades": 31, "win_rate": "32.3%", "pnl": "Rp +28M", "pf": 1.32,
+                     "total_return": "2.79%", "max_drawdown": "-3.12%", "sharpe": -0.53},
+        },
+        "vs_baseline": "2024: -8.06% vs -6.05% WORSE (-2.01pp, -Rp 21M). "
+                       "2025: +2.79% vs +14.55% CATASTROPHIC (-11.76pp, -Rp 117M). "
+                       "Trade count dropped 42→30 (2024) and 41→31 (2025). "
+                       "Win rate DOWN in both years. PF collapsed from 2.52 → 1.32 in 2025.",
+        "verdict": "REJECTED. The 1.5% margin is a blunt instrument that doesn't distinguish "
+                   "fakeouts from genuine breakouts — it just shifts WHICH breakouts enter and "
+                   "at what price. Three failure modes: "
+                   "(1) Removed slow-building 2025 winners: PTRO +45%+14.5%, DSSA +24.7%, "
+                   "GGRM +14.8%+15.5% — all grind through resistance over hours, not gap 1.5% instantly. "
+                   "(2) Freed cluster slots filled with WORSE trades: TPIA -13.1% emergency stop day 1, "
+                   "AKRA -13.1%, BBNI -4.7% — new entries were not better, they were worse. "
+                   "(3) 2024 fakeout pattern is a bear market regime problem (no follow-through in "
+                   "downtrend), not an entry margin problem — the margin doesn't fix zero follow-through. "
+                   "⚠️ Revert: set BreakoutConfig.breakout_margin_pct = 0.0 before next experiment "
+                   "OR just reset is_breakout condition to `close > high_Nd` in signal_combiner.py.",
+        "run_ids": {"2024": "24177676602", "2025": "24177677897"},
+        "date": "2026-04-09",
+    },
     "exp11_sector_cohort_momentum": {
         "hypothesis": "Skip entry when ticker's sector cohort equal-weighted price index is below "
                       "its own SMA20. Symmetric with Exp 2 IHSG filter. Targets 2024 Financial "
@@ -761,6 +794,17 @@ KEY_LEARNINGS = """
     Fix: hardcode TICKER_SECTORS dict in scraper/price_scraper.py as fallback.
     main_backtest.py uses DB first, falls back to dict. Source: yfinance stock.info.
 
+26. ENTRY MARGIN FILTER RESHUFFLES TRADES RATHER THAN IMPROVING QUALITY
+    Discovered Apr 9 2026 (Exp 8): requiring close >= 1.5% above 60d high caused
+    2025 to collapse from +14.55% to +2.79%. The filter blocked slow-building winners
+    (PTRO +45%, DSSA +24%, GGRM +15%) that grind through resistance over hours.
+    When these slots were blocked, the cluster limit freed capacity for WORSE new trades
+    (TPIA -13.1% emergency stop on day 1, AKRA -13.1%). The 2024 fakeout-reversal
+    pattern is a bear market regime problem — breakouts fire but market provides no
+    follow-through. A fixed entry margin cannot fix zero follow-through.
+    Lesson: entry-side filters for fakeouts are blunt — address fakeouts on the EXIT
+    side instead (Exp 9: early exit if no +1% gain by day 8).
+
 25. SECTOR COHORT FILTER FAILS WITH YFINANCE SECTOR LABELS ON IDX
     Discovered Apr 9 2026 (Exp 11): equal-weighted sector cohort momentum filter
     (close > SMA20) made 2024 worse (-7.77% vs -6.05%) despite correct concept.
@@ -852,15 +896,23 @@ STEP 3 — Re-run ALL v10 experiments on full dataset ⬜
   All prior experiment results (Exp 1–7) were on 2025-only, 109-ticker data.
   Exp 11 already tested on 109-ticker 2024+2025 data — REJECTED.
 
-  NEXT EXPERIMENT: Exp 8 — Breakout Margin Filter
-  File: signals/signal_combiner.py → _add_breakout_signals()
-  Change: close > high_Nd → close > high_Nd * (1 + 0.015)
-  Config: add BreakoutConfig.breakout_margin_pct: float = 0.015
-  Hypothesis: 56% of 2024 losers show fakeout signature (enter on 1-tick break → stopped in 6-10d).
-              1.5% margin filters these without impacting 2025 monster winners (TINS, EMTK, PTRO).
+  ❌ Exp 8 REJECTED (Apr 9, 2026) — Breakout Margin Filter (close >= 1.5% above 60d high)
+     2024: -8.06% vs -6.05% WORSE. 2025: +2.79% vs +14.55% CATASTROPHIC.
+     Filter blocked slow-building 2025 winners, freed slots for worse replacement trades.
+     ⚠️ Revert: reset is_breakout to `close > high_Nd` in _add_breakout_signals() before Exp 9.
+     Config residue: BreakoutConfig.breakout_margin_pct = 0.015 exists but is now DEAD WEIGHT.
+     Either remove it or set to 0.0 — it should not be active.
+
+  NEXT EXPERIMENT: Exp 9 — Early No-Follow-Through Exit
+  File: backtest/portfolio.py (exit logic)
+  Hypothesis: if price hasn't achieved +1% at any point by day 8 post-entry, exit.
+              Targets the fakeout-reversal pattern on the EXIT side: slow bleeds that
+              eventually hit the -7% stop on day 6-10. Cut early before the stop fires.
+  Expected impact: removes the slow-bleed losers from 2024 without touching 2025 winners
+                   (TINS, EMTK, PTRO all showed immediate follow-through on entry day).
 
   Subsequent experiments (one per session):
-    ⏸ Exp 9: Early no-follow-through exit (no +1% by day 8) — backtest/portfolio.py
+    ⏸ Exp 10: ATR cap (reframe to 7% threshold or regime-conditional) — signal_combiner.py
     ⏸ Exp 10: ATR cap (reframe to 7% threshold or regime-conditional) — signal_combiner.py
     ⏸ Exp 12: Consecutive loss throttle (3 losses → max 2 entries for 10d) — engine.py
     ⏸ Exp 1 re-test: Emergency stop -12% → -10%
