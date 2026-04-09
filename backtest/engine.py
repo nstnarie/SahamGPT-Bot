@@ -91,6 +91,7 @@ class BacktestEngine:
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
         consecutive_losses = 0          # Exp 12: consecutive loss counter
         throttle_until = None           # Exp 12: date when 2-entry cap expires
+        recent_sector_entries: List[object] = []  # Exp 7: (date, sector) for sector-specific limits
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -129,6 +130,15 @@ class BacktestEngine:
                     # Cooldown check
                     if ticker in cooldown_until and current_date < cooldown_until[ticker]:
                         continue
+
+                    # Exp 7: Financial Services sector limit — max 2 entries per rolling 10 days.
+                    # Bank stocks are highly correlated — multiple entries = concentrated risk.
+                    ticker_sector = stock_sectors.get(ticker, "")
+                    if ticker_sector == "Financial Services":
+                        fs_count = sum(1 for d, s in recent_sector_entries
+                                       if d >= recent_cutoff_date and s == "Financial Services")
+                        if fs_count >= 2:
+                            continue
 
                     if ticker in current_data and ticker not in portfolio.positions:
                         row = current_data[ticker]
@@ -191,6 +201,7 @@ class BacktestEngine:
                                 portfolio.cash -= buy["total_cost"]
                                 entries_today += 1
                                 recent_entry_dates.append(current_date)
+                                recent_sector_entries.append((current_date, sector))
 
                 pending_entries.clear()
 
