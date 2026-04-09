@@ -209,6 +209,9 @@ LQ45_TICKERS = [
     # ── Expansion Batch 2 (Apr 2026 — additional screening universe) ──
     "ADHI", "AGRO", "AMAN", "ARGO", "ARTO", "ASSA", "AVIA", "BNBA",
     "DOID", "ENRG", "IMAS", "KRAS", "POWR", "SMBR", "SMDR", "WIIM",
+
+    # ── Expansion Batch 3 (Apr 2026 — queued additions) ──
+    "INET",
 ]
 
 
