@@ -1,5 +1,5 @@
 # SahamGPT-Bot — Session Handoff Document
-> Last updated: April 9, 2026 (v16 — 2024 backfill COMPLETE, split files updated, ready for Step 2)
+> Last updated: April 9, 2026 (v17 — 2024+2025 backtests confirmed, backfill bug fixed, ready for new ticker scrape + Opus analysis)
 > Repo: https://github.com/nstnarie/SahamGPT-Bot (public, Python 100%)
 > Paste this at the start of a new chat to resume seamlessly.
 
@@ -41,29 +41,59 @@
 
 ---
 
-## 2. What Happened This Session (April 5–6, 2026)
+## 2. What Happened This Session (April 9, 2026)
 
-### Trade Log Loss Analysis (done in Opus)
-Full analysis of all 28 losing trades (-Rp 103M total) from v9 backtest.
-5 new experiments queued (Exp 6–10) based on patterns found:
-- Pattern 1: Apr-May cluster (-Rp 27.8M, 7 straight losses) → Exp 6
-- Pattern 2: Re-entry after exhaustion → Exp 4 (already done)
-- Pattern 3: Emergency stops (ESSA, HRUM, EMTK Oct) → Exp 8, 10
-- Pattern 4: Financial sector correlation (-Rp 18.4M) → Exp 7
-- Pattern 5: TIME_EXIT dead trades (-Rp 11.1M) → Exp 9
+### Prior session (April 5–6, 2026)
+- Full loss analysis of v9 28 losing trades (-Rp 103M). 5 patterns identified → Exp 6–10 queued.
+- Exp 4 ACCEPTED, Exp 5/6/7 REJECTED. See experiment log in DEVELOPER_CONTEXT.py.
 
-### Experiments Run This Session
-| Exp | Description | Run ID | Result |
-|-----|-------------|--------|--------|
-| 4 | Post-TREND_EXIT cooldown 30d | 24005616009 | ✅ ACCEPTED — PF +0.19, +Rp 8M |
-| 5 | Remove Rp 150 min price filter | 24005950325 | ❌ REJECTED — WTON+GOTO both emergency stopped |
-| 6 | IHSG 5-day momentum filter | 24006068747 | ❌ REJECTED — too backward-looking, -Rp 68M |
-| 7 | Financial sector entry limit | 24006206306 | ❌ REJECTED — zero effect, banks naturally spread |
+### This session (April 9, 2026) — Key events
 
-### 2024 Q2 Batch 3 — STILL RUNNING
-- Run 24003326023, tickers 51–74, Apr 1→Jun 30
-- Started ~14:15 WIB Apr 5, expected ~4h — should complete soon
-- **Do NOT trigger batch 4 until this is confirmed complete**
+**2024 backfill complete (carried over from session end):**
+All Q1-Q4 2024 broker data scraped and merged → 2,071,251 records, split files updated.
+
+**Critical bug fixed — run_backtest.yml backfill:**
+Root cause of "Loaded 2 stocks, IHSG: 0 days" diagnosed and fixed.
+- `daily_signals.yml` uploads daily prices (today-only) to idx-database artifact
+- Backfill step only checked `date >= warmup_start` (lower bound only)
+- Tickers with 2025-only data passed the check → backfill skipped
+- main_backtest's `date <= end_date` filter then excluded all 2025 rows → 0 results
+- Fix: query now checks BOTH bounds `date >= warmup_start AND date <= end_date`
+- Also added IHSG backfill block (same issue for index_daily table)
+- Also added `CREATE TABLE IF NOT EXISTS daily_prices/index_daily` for broker-only artifacts
+- Applied to both main and feature/v10-experiments
+
+**Synthetic data fully removed:**
+`main_backtest.py`: no more fallback from real broker data to synthetic ForeignFlow.
+Under `--real-broker`, empty ff means ticker trades on price/volume signals only (FF filter skipped).
+
+**2024 backtest — CONFIRMED WORKING** (run 24171380283, feature/v10-experiments):
+| Metric | Value |
+|--------|-------|
+| Loaded | 109 stocks, IHSG 237 days |
+| Trades | 42 |
+| Win Rate | 35.7% |
+| Total Return | **-6.05%** |
+| Profit Factor | 0.47 |
+| Max Drawdown | -6.76% (114 days) |
+| Sharpe | -2.13 |
+| Benchmark Max DD | -11.74% |
+
+**2025 backtest — CONFIRMED BASELINE** (run 24171709463, feature/v10-experiments):
+| Metric | Value |
+|--------|-------|
+| Loaded | 109 stocks, IHSG 236 days |
+| Trades | 41 |
+| Win Rate | 41.5% |
+| Total Return | **+14.55%** |
+| Profit Factor | 2.52 |
+| Max Drawdown | -3.37% (51 days) |
+| Sharpe | 1.11 / Sortino 1.93 / Calmar 4.59 |
+| Benchmark Return | +20.71% / Benchmark Max DD -17.76% |
+
+**Key insight from 2024 vs 2025:**
+Strategy is regime-sensitive by design (breakout/momentum). 2024 IHSG bear year → false breakouts dominate. 
+2025 bull year → strategy excels. Experiments 8-10 target the 2024 false breakout problem specifically.
 
 ---
 
@@ -150,52 +180,41 @@ All workflows touching idx-database must run **sequentially, never in parallel.*
 
 ## 7. Next Steps (in order)
 
-### ⚠️ EXPERIMENT STRATEGY — IMPORTANT DECISION (Apr 6, 2026)
-All v10 experiments (Exp 8, 9, 10 and any re-tests) are **ON HOLD** until the full dataset is ready:
-- ~~Full 2024 broker summary data~~ ✅ DONE (Apr 9, 2026)
-- Full 2025 broker summary data (already complete) ✅
-- Price + broker data for 27+ new tickers (initial_scrape + scrape_broker_summary pending) ⬜
-- Then: re-run ALL experiments (including re-tests of Exp 4, 7) against the complete 2024+2025 universe ⬜
-
-Reason: results on partial/old-universe data will be invalidated once the full dataset is ready. No point running Exp 8–10 twice.
+### ⚠️ CURRENT PRIORITY (Apr 9, 2026)
+Two parallel tracks running simultaneously:
+1. **MAIN branch**: Scrape new 28 tickers (broker summary + prices)
+2. **FEATURE branch**: Opus analysis of 2024+2025 trade logs → brainstorm improvements
 
 ### ✅ COMPLETE — 2024 Broker Data Backfill (109 original tickers)
-```
-Q1 2024: ✅ COMPLETE
-Q2 2024: ✅ COMPLETE (Apr 6, 2026) — 1,518,834 total records
-Q3 2024: ✅ COMPLETE (Apr 8, 2026) — 1,805,857 total records, split files updated
+Final: **2,071,251 records** | part_a 1,269,996 + part_b 801,255 ✅ (Apr 9, 2026)
 
-Q4 2024: ✅ COMPLETE (Apr 9, 2026)
-         ✅ batch 1 (tickers 1-25, Oct 1→Dec 31) run 24111084856 — +79,207
-         ✅ batch 2 (tickers 26-50, Oct 1→Dec 31) run 24119625128 — +62,137
-         ✅ batch 3 (tickers 51-75, Oct 1→Dec 31) run 24131152829 — +53,737
-         ✅ batch 4 pt1 (tickers 76-109, Oct 1→Nov 15) run 24145458928 — +40,359
-         ✅ batch 4 pt2 (tickers 76-109, Nov 16→Dec 31) run 24153250161 — +29,954
-         ✅ export_summary.yml → update_split_files.yml (Apr 9, 2026)
-```
-Final: **2,071,251 records** | part_a 1,269,996 + part_b 801,255 ✅
+### ✅ COMPLETE — 2024 + 2025 Backtests Confirmed (Apr 9, 2026)
+| Year | Trades | WR | Return | PF | Max DD | Sharpe | Run ID |
+|------|--------|-----|--------|----|--------|--------|--------|
+| 2024 | 42 | 35.7% | -6.05% | 0.47 | -6.76% | -2.13 | 24171380283 |
+| 2025 | 41 | 41.5% | +14.55% | 2.52 | -3.37% | 1.11 | 24171709463 |
 
-### AFTER 2024 BACKFILL — TICKER UNIVERSE EXPANSION ✅ (scraper/price_scraper.py updated Apr 6)
-LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + liquidity check (yfinance, 30d avg):
+Both on feature/v10-experiments, 109 tickers, real_broker=true.
 
-**Batch 1 (high-liquidity):** AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB, RAJA, RATU, WIFI
+### ✅ COMPLETE — Backfill Bug Fixed (Apr 9, 2026)
+`run_backtest.yml` "Backfill missing price data" step now checks both date bounds.
+Applied to both main and feature/v10-experiments. See DEVELOPER_CONTEXT.py Learning 21+22.
 
-**Batch 2 (additional screening):** ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS, KRAS, POWR, SMBR, SMDR, WIIM
+### TICKER UNIVERSE EXPANSION ⬜ IN PROGRESS
+LQ45_TICKERS expanded to **137 tickers** on feature/v10-experiments (109 original + 28 new).
+New tickers: AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB, RAJA, RATU, WIFI,
+             ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS,
+             KRAS, POWR, SMBR, SMDR, WIIM, INET (added Apr 9)
+⚠️ **ENRG: verify price manually** — yfinance shows Rp 1500 (historically ~Rp 100-200).
 
-**Not added:** MLPL(Rp91), ABBA(Rp44), ACST(Rp98), BKSL(Rp108) — sub-Rp150 / AMAR, CMNP, MCAS — too thin (<Rp1B/day)
-
-**Added Apr 9, 2026:** INET (Rp 258, Rp 106B/day ✅) — added to feature branch Batch 3
-
-⚠️ **ENRG: verify price manually** — yfinance shows Rp 1500 (historically ~Rp 100-200). May be split-adjusted.
-
-**Remaining steps after 2024 backfill:**
-1. `initial_scrape.yml` — OHLCV 2021-01-01→present for 27 new tickers
-2. `scrape_broker_summary.yml` with tickers override, 2024-01-01→2025-12-31 (sequential batches)
-3. `export_summary.yml` → `update_split_files.yml` → push to main
+**Steps remaining:**
+1. `scrape_broker_summary.yml` — new 28 tickers, 2024-01-01→2025-12-31 (sequential batches, main branch) ⬜
+2. `initial_scrape.yml` — OHLCV 2021-01-01→present for new 28 tickers ⬜
+3. `export_summary.yml` → `update_split_files.yml` → push to main ⬜
 
 ### v10 EXPERIMENTS — STATUS
 
-> ⚠️ **ALL PENDING EXPERIMENTS ON HOLD** — Will redo the entire experiment suite once the full dataset is ready: 2024+2025 broker summary + price data for all 136 tickers. Results on partial/old-universe data will be invalidated.
+> ⚠️ **ALL PENDING EXPERIMENTS ON HOLD** — Will redo the entire experiment suite once the full dataset is ready: 2024+2025 broker summary + price data for all 137 tickers. Results on partial/old-universe data will be invalidated.
 
 **Current baseline (post Exp 4, 2025 data only, 109 tickers): 41t | 41.5% WR | PF 2.52 | +Rp 145M | DD -3.37% | Calmar 4.59**
 
