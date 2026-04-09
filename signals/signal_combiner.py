@@ -147,9 +147,13 @@ class SignalCombiner:
             (df["close_position"] < 0.33)         # close near the low
         )
 
+        # Exp 8: require close to clear high_Nd by at least breakout_margin_pct
+        # Targets the 56% fakeout-reversal pattern: entered on 1-tick break, stopped -3% to -7% within 6–10 days
+        breakout_threshold = df["high_Nd"] * (1 + cfg.breakout_margin_pct)
+
         # Breakout conditions
         df["is_breakout"] = (
-            (df["close"] > df["high_Nd"]) &              # breaks historical resistance
+            (df["close"] > breakout_threshold) &          # breaks resistance by margin (Exp 8)
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
             (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
             (df["close"] > df["ma_50"]) &                 # above MA50 (uptrend)

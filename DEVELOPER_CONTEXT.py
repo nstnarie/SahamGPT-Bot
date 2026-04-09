@@ -208,7 +208,7 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — feature/v10-experiments baseline confirmed on both 2024+2025 data. Next: scrape new 28 tickers then re-run all experiments on full 2024+2025 dataset."
+STATUS = "ACTIVE — Exp 11 REJECTED. 28-ticker scrape Run 1 in progress (main). Next: complete Runs 2-8 for 28 tickers, then implement Exp 8 (breakout margin filter)."
 
 CURRENT_VERSION = "v10-experiments (feature branch)"
 
@@ -276,6 +276,36 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp11_sector_cohort_momentum": {
+        "hypothesis": "Skip entry when ticker's sector cohort equal-weighted price index is below "
+                      "its own SMA20. Symmetric with Exp 2 IHSG filter. Targets 2024 Financial "
+                      "Services + Real Estate cluster (9 combined losers). "
+                      "Opus analysis showed sector downtrend as root cause of 2024 clustering.",
+        "change": "signals/sector_regime.py (new): SectorRegimeFilter class. "
+                  "signals/signal_combiner.py: sector_entry_ok gate in _evaluate_signal. "
+                  "backtest/engine.py: passes stock_sectors to generate_signals_universe. "
+                  "config.py: exp11_sector_filter_enabled=True, exp11_sector_ma_period=20. "
+                  "scraper/price_scraper.py: TICKER_SECTORS dict (CI fallback). "
+                  "main_backtest.py: falls back to TICKER_SECTORS when DB stocks table empty.",
+        "result": {
+            "2024": {"trades": 39, "win_rate": "30.8%", "pnl": "Rp -78M", "pf": 0.38,
+                     "total_return": "-7.77%", "max_drawdown": "-8.13%", "sharpe": -2.59},
+            "2025": {"trades": 40, "win_rate": "42.5%", "pnl": "Rp +147M", "pf": 2.57,
+                     "total_return": "14.74%", "max_drawdown": "-3.22%", "sharpe": 1.13},
+        },
+        "vs_baseline": "2024: -7.77% vs -6.05% WORSE (-1.72pp, -Rp 17M). "
+                       "2025: +14.74% vs +14.55% marginal improvement (+0.19pp, +Rp 2M). "
+                       "Net: experiment hurt the year it was designed to fix.",
+        "verdict": "REJECTED. The filter blocked 3 good 2024 losers (TLKM, ISAT, EXCL) but also "
+                   "a winner (ICBP +2.08%) and redirected capital into worse entries (MEDC -5.93%, "
+                   "MAPA -8.43%). Blocking one sector just shifted entries to equally bad trades "
+                   "in other sectors. Root cause: yfinance sector labels create noisy IDX cohorts — "
+                   "TLKM and EMTK share 'Communication Services' despite very different behavior. "
+                   "Concept is sound but needs IDX-native GICS classification to work. "
+                   "⚠️ Set exp11_sector_filter_enabled=False before merging feature → main.",
+        "run_ids": {"2024": "24176911049", "2025": "24176912534"},
+        "date": "2026-04-09",
+    },
     "exp6_ihsg_5d_momentum": {
         "hypothesis": "Exp 2 single-day IHSG check passes during multi-day rollovers. "
                       "Requiring IHSG 5d return > 0 filters entries during sustained weakness. "
@@ -716,6 +746,31 @@ KEY_LEARNINGS = """
     with out-of-range data are correctly detected and backfilled from Yahoo Finance.
     Also added IHSG backfill block (same issue — index_daily had only 2025 data).
 
+23. ALWAYS COMMIT AND PUSH BEFORE TRIGGERING CI
+    Discovered Apr 9 2026: triggered 3 backtest runs that all returned identical
+    results to the baseline because local code changes had not been committed or
+    pushed. GitHub Actions checks out code from the remote branch — local edits
+    are invisible until pushed. Rule: always run `git status` and confirm the
+    branch is ahead of origin before triggering any workflow run.
+
+24. stocks TABLE IN CI ARTIFACT MAY NOT HAVE SECTOR DATA
+    The stocks table (ticker → sector mapping) is only populated by flow_scraper.py,
+    called from daily_signals.yml. When the most recent idx-database artifact was
+    uploaded by initial_scrape.yml or scrape_broker_summary.yml, the stocks table
+    is empty → stock_sectors dict is empty → any sector-based filter is a no-op.
+    Fix: hardcode TICKER_SECTORS dict in scraper/price_scraper.py as fallback.
+    main_backtest.py uses DB first, falls back to dict. Source: yfinance stock.info.
+
+25. SECTOR COHORT FILTER FAILS WITH YFINANCE SECTOR LABELS ON IDX
+    Discovered Apr 9 2026 (Exp 11): equal-weighted sector cohort momentum filter
+    (close > SMA20) made 2024 worse (-7.77% vs -6.05%) despite correct concept.
+    Root cause: yfinance groups TLKM (large-cap telco) and EMTK (volatile mid-cap
+    media) in the same 'Communication Services' cohort — their opposite price
+    behaviors cancel out, making the cohort signal unreliable. Additionally,
+    blocking entries in weak sectors redirected capital into equally bad entries
+    in other sectors (MEDC -5.93%, MAPA -8.43% appeared as new trades).
+    The filter needs IDX-native GICS classification to be effective. Deferred.
+
 22. ARTIFACT CHAIN RISK — DAILY SIGNALS OVERWRITES PRICE DATA RANGE
     daily_signals.yml uploads idx-database artifact daily with ONLY today's prices.
     If run_backtest.yml downloads this artifact and the backfill check only looks
@@ -773,35 +828,48 @@ STEP 1 — Complete 2024 broker data backfill (original 109 tickers) ✅ COMPLET
   Q4 2024: ✅ COMPLETE (Apr 9, 2026) — 5 runs (batch1+2+3 full quarter, batch4 Oct-Nov15, Nov16-Dec31)
   Final: 2,071,251 records | 2024-01-02→2025-12-30 | part_a 1,269,996 + part_b 801,255 ✅
 
-STEP 2 — Scrape additional 28 tickers (price + broker data) ⬜ IN PROGRESS (Apr 9, 2026)
-  2a. Merge scraper/price_scraper.py (137 tickers) from feature → main ⬜
-  2b. Run initial_scrape.yml — OHLCV 2021-01-01→present for 28 new tickers ⬜
-  2c. Run scrape_broker_summary.yml with custom tickers override, 2024-01-01→2025-12-31 ⬜
-      Sequential batches (use tickers= override not batch number).
+STEP 2 — Scrape additional 28 tickers (price + broker data) 🔄 IN PROGRESS (Apr 9, 2026)
+  2a. scrape_broker_summary.yml — 28 tickers, 2024-01-01→2025-12-31, 8 sequential quarterly runs
+      Use tickers= override field (not batch=). Run on main branch.
       Tickers: AADI,ADMR,BREN,BRIS,CUAN,DEWA,PANI,PSAB,RAJA,RATU,WIFI,
                ADHI,AGRO,AMAN,ARGO,ARTO,ASSA,AVIA,BNBA,DOID,ENRG,IMAS,
                KRAS,POWR,SMBR,SMDR,WIIM,INET
-  2d. export_summary.yml → update_split_files.yml → verify total ⬜
-  ⚠️ Verify ENRG price manually on Stockbit before scraping — yfinance shows unusual Rp 1500
-  ⚠️ PARALLEL STRATEGY: 2c can run on main while experiments run on feature branch.
+      Run 1 (2024-Q1): 🔄 IN PROGRESS — run 24173626928
+      Run 2 (2024-Q2): ⬜ Pending
+      Run 3 (2024-Q3): ⬜ Pending
+      Run 4 (2024-Q4): ⬜ Pending
+      Run 5 (2025-Q1): ⬜ Pending
+      Run 6 (2025-Q2): ⬜ Pending
+      Run 7 (2025-Q3): ⬜ Pending
+      Run 8 (2025-Q4): ⬜ Pending
+  2b. initial_scrape.yml — OHLCV 2021-01-01→present for 28 new tickers ⬜ (after 2a complete)
+  2c. export_summary.yml → update_split_files.yml → verify total ⬜
+  ⚠️ PARALLEL STRATEGY: 2a can run on main while experiments run on feature branch.
      run_backtest.yml from feature does NOT upload idx-database — confirmed safe.
 
 STEP 3 — Re-run ALL v10 experiments on full dataset ⬜
-  Dataset: 2024-01-01→2025-12-31 | 136 tickers | real_broker=true
+  Dataset: 2024-01-01→2025-12-31 | 137 tickers | real_broker=true
   All prior experiment results (Exp 1–7) were on 2025-only, 109-ticker data.
-  Re-test everything from scratch. Exp 5 (Rp 150 filter) likely stays rejected.
+  Exp 11 already tested on 109-ticker 2024+2025 data — REJECTED.
 
-  Experiments queued (one per session, on feature/v10-experiments):
+  NEXT EXPERIMENT: Exp 8 — Breakout Margin Filter
+  File: signals/signal_combiner.py → _add_breakout_signals()
+  Change: close > high_Nd → close > high_Nd * (1 + 0.015)
+  Config: add BreakoutConfig.breakout_margin_pct: float = 0.015
+  Hypothesis: 56% of 2024 losers show fakeout signature (enter on 1-tick break → stopped in 6-10d).
+              1.5% margin filters these without impacting 2025 monster winners (TINS, EMTK, PTRO).
+
+  Subsequent experiments (one per session):
+    ⏸ Exp 9: Early no-follow-through exit (no +1% by day 8) — backtest/portfolio.py
+    ⏸ Exp 10: ATR cap (reframe to 7% threshold or regime-conditional) — signal_combiner.py
+    ⏸ Exp 12: Consecutive loss throttle (3 losses → max 2 entries for 10d) — engine.py
     ⏸ Exp 1 re-test: Emergency stop -12% → -10%
-    ⏸ Exp 2 re-test: IHSG market filter (currently accepted — confirm holds)
+    ⏸ Exp 2 re-test: IHSG market filter (currently accepted — confirm on full data)
     ⏸ Exp 3 re-test: FF magnitude filter
-    ⏸ Exp 4 re-test: Post-TREND_EXIT cooldown 30d (currently accepted — confirm holds)
+    ⏸ Exp 4 re-test: Post-TREND_EXIT cooldown 30d (currently accepted — confirm on full data)
     ⏸ Exp 5 re-test: Remove Rp 150 min price filter (expect rejected again)
     ⏸ Exp 6 re-test: IHSG 5d momentum filter (expect rejected again)
     ⏸ Exp 7 re-test: Financial sector entry limit (may fire now with 2024 data)
-    ⏸ Exp 8: Breakout margin filter (close ≥1–2% above 60d high) — signals/signal_combiner.py
-    ⏸ Exp 9: Early no-follow-through exit (no +1% by day 8) — backtest/portfolio.py
-    ⏸ Exp 10: ATR/price volatility cap (ATR > 5% of close → skip) — signals/signal_combiner.py
     ⬜ Exp 7a/7b/7c: S/R detection, averaging up, chart patterns — ON HOLD (post-integration)
 
 STEP 4 — Integration ⬜
