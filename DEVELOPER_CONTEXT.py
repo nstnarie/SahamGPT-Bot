@@ -374,14 +374,13 @@ IN_PROGRESS = """
    - Split files updated: 242,321 + 801,255 = 1,043,576 ✅
    - Apr 1–7 confirmed Lebaran holiday — no data expected ✅
 
-2. 2024 BROKER DATA — IN PROGRESS 🔄
+2. 2024 BROKER DATA — COMPLETE ✅ (Apr 9, 2026)
    - Q1 2024: COMPLETE ✅
    - Q2 2024: COMPLETE ✅ (Apr 6, 2026) — 1,518,834 total records, split files updated
    - Q3 2024: COMPLETE ✅ (Apr 8, 2026) — 1,805,857 total records, split files updated
-               part_a: 1,004,602 records (2024-01-02→2025-03-27)
+   - Q4 2024: COMPLETE ✅ (Apr 9, 2026) — 2,071,251 total records, split files updated
+               part_a: 1,269,996 records (2024-01-02→2025-03-27)
                part_b: 801,255 records (2025-04-08→2025-12-30)
-   - Q4 2024: 🔄 IN PROGRESS — batch 1 running (run 24111084856, 2024-10-01→2024-12-31)
-   - After each quarter: export_summary.yml → update_split_files.yml
 
 3. PRICE DATA ✅
    - initial_scrape.yml run on 2026-03-28
@@ -416,15 +415,15 @@ IN_PROGRESS = """
 
 DATABASE_STATE = """
 File: idx_swing_trader.db (SQLite)
-broker_summary record count: 1,518,834 (as of Apr 6, 2026 — Q1+Q2 2024 + full 2025)
+broker_summary record count: 2,071,251 (as of Apr 9, 2026 — full 2024+2025, 109 tickers)
 broker_summary date range: 2024-01-02 → 2025-12-30
 Unique tickers in broker_summary: 109 (original universe — new 27 tickers not yet scraped)
 Unique tickers in daily_prices: 107 (136-ticker price scrape not yet run for new tickers)
 
-Split files (as of Apr 6, 2026):
-  idx_broker_part_a.db: 717,579 records | 2024-01-02 → 2025-03-27
+Split files (as of Apr 9, 2026):
+  idx_broker_part_a.db: 1,269,996 records | 2024-01-02 → 2025-03-27
   idx_broker_part_b.db: 801,255 records | 2025-04-08 → 2025-12-30
-  Total: 1,518,834 ✅
+  Total: 2,071,251 ✅
 
 Tables: broker_summary, stocks, daily_prices, foreign_flow,
         corporate_actions, index_daily, signal_log
@@ -729,12 +728,12 @@ NEXT_STEPS = """
 ORDERED EXECUTION PLAN (do in sequence, do not skip steps)
 ══════════════════════════════════════════════════════════════
 
-STEP 1 — Complete 2024 broker data backfill (original 109 tickers) ⬜
+STEP 1 — Complete 2024 broker data backfill (original 109 tickers) ✅ COMPLETE (Apr 9, 2026)
   Q1 2024: ✅ COMPLETE
   Q2 2024: ✅ COMPLETE (Apr 6, 2026)
-  Q3 2024: ⬜ batch1 → batch2 → batch3 → batch4 Jul → batch4 Aug → batch4 Sep
-  Q4 2024: ⬜ batch1 → batch2 → batch3 → batch4 Oct → batch4 Nov → batch4 Dec
-  After each quarter: export_summary.yml → update_split_files.yml
+  Q3 2024: ✅ COMPLETE (Apr 8, 2026)
+  Q4 2024: ✅ COMPLETE (Apr 9, 2026) — 5 runs (batch1+2+3 full quarter, batch4 Oct-Nov15, Nov16-Dec31)
+  Final: 2,071,251 records | 2024-01-02→2025-12-30 | part_a 1,269,996 + part_b 801,255 ✅
 
 STEP 2 — Scrape additional 27 tickers (price + broker data) ⬜
   2a. Merge scraper/price_scraper.py (136 tickers) from feature → main
