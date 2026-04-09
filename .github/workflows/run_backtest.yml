@@ -64,6 +64,13 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get latest split files from main
+        if: steps.check_db.outputs.exists == 'true'
+        run: |
+          git fetch origin main
+          git checkout origin/main -- idx_broker_part_a.db idx_broker_part_b.db
+          echo "Split files fetched from origin/main"
+
       - name: Merge broker data from split files if needed
         if: steps.check_db.outputs.exists == 'true'
         run: |
@@ -74,19 +81,25 @@ jobs:
           PART_A = "idx_broker_part_a.db"
           PART_B = "idx_broker_part_b.db"
 
+          if not os.path.exists(PART_A) or not os.path.exists(PART_B):
+              print("Split files not found — cannot verify or merge, proceeding without broker data")
+              exit(0)
+
+          # Get authoritative total from split files
+          split_a = sqlite3.connect(PART_A).execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          split_b = sqlite3.connect(PART_B).execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          split_total = split_a + split_b
+          print(f"Split files: {split_a:,} + {split_b:,} = {split_total:,} records")
+
           conn = sqlite3.connect(DB)
           count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
           conn.close()
 
-          if count > 0:
-              print(f"broker_summary already has {count:,} records — skipping merge")
+          if count >= split_total:
+              print(f"broker_summary has {count:,} records (>= split total) — skipping merge")
               exit(0)
 
-          print("broker_summary is empty — merging from split files...")
-
-          if not os.path.exists(PART_A) or not os.path.exists(PART_B):
-              print("Split files not found in repo — cannot merge, proceeding without broker data")
-              exit(0)
+          print(f"broker_summary has {count:,} records (< split total {split_total:,}) — merging from split files...")
 
           conn = sqlite3.connect(DB)
           for part in [PART_A, PART_B]:
@@ -249,7 +262,7 @@ jobs:
 
       - name: Save database
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         with:
           name: idx-database
           path: idx_swing_trader.db
