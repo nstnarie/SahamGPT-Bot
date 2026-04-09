@@ -184,7 +184,7 @@ LQ45_TICKERS expanded from **109 → 136 tickers**. 27 added, based on price + l
 
 **Not added:** MLPL(Rp91), ABBA(Rp44), ACST(Rp98), BKSL(Rp108) — sub-Rp150 / AMAR, CMNP, MCAS — too thin (<Rp1B/day)
 
-**Queued for future addition (not yet in code):** INET (Rp 258, Rp 106B/day ✅) — plus any other tickers Arie adds before Step 2 scraping begins
+**Added Apr 9, 2026:** INET (Rp 258, Rp 106B/day ✅) — added to feature branch Batch 3
 
 ⚠️ **ENRG: verify price manually** — yfinance shows Rp 1500 (historically ~Rp 100-200). May be split-adjusted.
 

@@ -389,13 +389,12 @@ IN_PROGRESS = """
      broker_summary. Fixed via self-healing backfill step in run_backtest.yml.
 
 4. TICKER UNIVERSE — EXPANDED (as of 2026-04-06)
-   - feature/v10-experiments: 137 tickers (136 confirmed + INET pending addition to code)
-   - main: 109 tickers (original — stays until 2024 backfill complete)
-   - 27 tickers added to feature Apr 6 2026: AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB,
+   - feature/v10-experiments: 137 tickers (109 original + 28 new)
+   - main: 109 tickers (original — scraper uses this)
+   - 28 tickers added to feature Apr 2026: AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB,
      RAJA, RATU, WIFI, ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS,
-     KRAS, POWR, SMBR, SMDR, WIIM
-   - INET: ⬜ to be added to feature branch later (Rp 258, Rp 106B/day — solid liquidity)
-   - More additional tickers may be added before Step 2 scraping begins
+     KRAS, POWR, SMBR, SMDR, WIIM, INET
+   - INET added to feature branch Apr 9, 2026 (Rp 258, Rp 106B/day)
    - Excluded (sub-Rp150): MLPL(91), ABBA(44), ACST(98), BKSL(108)
    - Excluded (too thin): AMAR(0.11), CMNP(0.37), MCAS(0.13)
    - ENRG: verify price manually on Stockbit before scraping (yfinance shows unusual Rp 1500)
