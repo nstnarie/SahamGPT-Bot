@@ -82,9 +82,6 @@ class BreakoutConfig:
     # Price must be above this MA
     trend_ma_period: int = 50
 
-    # Exp 8: minimum margin above 60-day high to confirm breakout (filters fakeout 1-tick breaks)
-    # 0.015 = 1.5% — sweet spot: 1% too thin (still catches noise), 2% may exclude large-cap breakouts
-    breakout_margin_pct: float = 0.015
 
 
 @dataclass
