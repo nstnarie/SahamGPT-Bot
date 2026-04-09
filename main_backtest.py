@@ -145,8 +145,8 @@ def main():
             universe_prices[ticker] = pdf
         if args.real_broker:
             ff = load_broker_summary_as_ff_df(session, ticker, start_dt, end_dt)
-            if ff.empty:
-                ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
+            # No fallback to synthetic — tickers without real broker data
+            # trade on price/volume signals only (FF filter skipped when ff is empty)
             acc = load_broker_accumulation_df(session, ticker, start_dt, end_dt)
             if not acc.empty:
                 broker_accumulations[ticker] = acc
