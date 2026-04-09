@@ -158,15 +158,17 @@ jobs:
           """)
           conn.commit()
 
-          # Find tickers with broker data but no price data in the warmup window.
-          # This catches both completely missing tickers AND tickers that only have
-          # data from a later period (e.g. 2025-only when we need 2024 data).
+          backtest_end = "${{ github.event.inputs.end_date }}"
+
+          # Find tickers with broker data but no price data inside the backtest window
+          # [warmup_start, end_date]. Checking BOTH bounds catches tickers that only
+          # have 2025-only data when the backtest period ends in 2024 or earlier.
           missing = conn.execute(f"""
               SELECT DISTINCT b.ticker
               FROM broker_summary b
               LEFT JOIN (
                   SELECT DISTINCT ticker FROM daily_prices
-                  WHERE date >= '{warmup_start}'
+                  WHERE date >= '{warmup_start}' AND date <= '{backtest_end}'
               ) d ON b.ticker = d.ticker
               WHERE d.ticker IS NULL
               ORDER BY b.ticker
@@ -242,6 +244,73 @@ jobs:
 
           conn.close()
           print("Backfill complete")
+
+          # ── IHSG backfill ──
+          # Backfill index_daily if there is no IHSG data inside the backtest window.
+          conn = sqlite3.connect(DB)
+          conn.execute("""
+              CREATE TABLE IF NOT EXISTS index_daily (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  index_code TEXT NOT NULL DEFAULT 'IHSG',
+                  date TEXT NOT NULL,
+                  open REAL, high REAL, low REAL, close REAL, volume REAL,
+                  UNIQUE(index_code, date)
+              )
+          """)
+          conn.commit()
+          ihsg_count = conn.execute(f"""
+              SELECT COUNT(*) FROM index_daily
+              WHERE index_code = 'IHSG'
+                AND date >= '{warmup_start}' AND date <= '{backtest_end}'
+          """).fetchone()[0]
+          conn.close()
+
+          if ihsg_count > 0:
+              print(f"IHSG: {ihsg_count} rows in backtest window — skipping")
+          else:
+              print("IHSG missing in backtest window — backfilling from Yahoo Finance...")
+              try:
+                  df = yf.Ticker("^JKSE").history(
+                      start=START, end=date.today().isoformat(), auto_adjust=False
+                  )
+                  if df.empty:
+                      print("  No IHSG data from Yahoo Finance")
+                  else:
+                      df = df.reset_index()
+                      df.columns = [c.lower().replace(" ", "_") for c in df.columns]
+                      if "date" in df.columns:
+                          df["date"] = df["date"].apply(
+                              lambda x: x.strftime("%Y-%m-%d") if hasattr(x, "strftime") else str(x)[:10]
+                          )
+                      elif "datetime" in df.columns:
+                          df["date"] = df["datetime"].apply(
+                              lambda x: x.strftime("%Y-%m-%d") if hasattr(x, "strftime") else str(x)[:10]
+                          )
+                      df = df.dropna(subset=["close"])
+                      conn = sqlite3.connect(DB)
+                      inserted = 0
+                      for _, row in df.iterrows():
+                          try:
+                              conn.execute("""
+                                  INSERT OR IGNORE INTO index_daily
+                                      (index_code, date, open, high, low, close, volume)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                              """, (
+                                  "IHSG", row["date"],
+                                  float(row.get("open") or 0),
+                                  float(row.get("high") or 0),
+                                  float(row.get("low") or 0),
+                                  float(row.get("close") or 0),
+                                  float(row.get("volume") or 0),
+                              ))
+                              inserted += 1
+                          except Exception:
+                              pass
+                      conn.commit()
+                      conn.close()
+                      print(f"  Inserted {inserted} IHSG rows")
+              except Exception as e:
+                  print(f"  IHSG backfill failed: {e}")
           EOF
 
       - name: Scrape data (if no database)
