@@ -55,6 +55,13 @@ class MarketRegimeConfig:
         "BULL": 1.0, "SIDEWAYS": 0.5, "BEAR": 0.0,
     })
 
+    # Exp 11: Sector cohort momentum filter
+    # Skip entry when the ticker's sector cohort is below its own SMA.
+    # Symmetric with Exp 2 IHSG filter (close > MA20), but applied per-sector.
+    # See signals/sector_regime.py.
+    exp11_sector_filter_enabled: bool = True
+    exp11_sector_ma_period: int = 20
+
 
 @dataclass
 class BreakoutConfig:

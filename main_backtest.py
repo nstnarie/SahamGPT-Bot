@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import FrameworkConfig, DATABASE_URL
 from database.schema import create_all_tables, get_session, get_engine, Stock
+from scraper.price_scraper import TICKER_SECTORS
 from database.data_loader import (
     load_prices_as_dataframe, load_index_df,
     load_foreign_flow_df, load_broker_summary_as_ff_df,
@@ -157,6 +158,8 @@ def main():
         stock = session.query(Stock).filter_by(ticker=ticker).first()
         if stock and stock.sector:
             stock_sectors[ticker] = stock.sector
+        elif ticker in TICKER_SECTORS:
+            stock_sectors[ticker] = TICKER_SECTORS[ticker]
 
     ihsg_df = load_index_df(session, "IHSG", start_dt, end_dt)
 

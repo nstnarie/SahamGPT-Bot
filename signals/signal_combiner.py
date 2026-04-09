@@ -16,6 +16,7 @@ import pandas as pd
 
 from config import FrameworkConfig, DEFAULT_CONFIG
 from signals.market_regime import MarketRegimeFilter
+from signals.sector_regime import SectorRegimeFilter
 from signals.technical import TechnicalAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,8 @@ class SignalCombiner:
         self.technical = TechnicalAnalyzer(config.technical)
 
     def generate_signals(self, ticker, price_df, ihsg_df, universe_prices,
-                         foreign_flow_df=None, broker_df=None):
+                         foreign_flow_df=None, broker_df=None,
+                         sector_entry_ok_series=None):
         if price_df.empty:
             return pd.DataFrame()
 
@@ -64,6 +66,17 @@ class SignalCombiner:
 
         result["regime"] = result["regime"].fillna("SIDEWAYS")
         result["exposure_mult"] = result["exposure_mult"].fillna(0.5)
+
+        # Exp 11: Sector cohort momentum filter — align series to result index.
+        # Default True (no-op) when caller didn't provide a sector series.
+        if sector_entry_ok_series is not None:
+            result["sector_entry_ok"] = (
+                sector_entry_ok_series.reindex(result.index, method="ffill")
+                .fillna(True)
+                .astype(bool)
+            )
+        else:
+            result["sector_entry_ok"] = True
 
         # Generate signals
         result["signal"] = result.apply(lambda row: self._evaluate_signal(row), axis=1)
@@ -269,6 +282,10 @@ class SignalCombiner:
             if not row.get("ihsg_entry_ok", True):
                 return "HOLD"
 
+            # Exp 11: skip entries when ticker's sector cohort is below its SMA20
+            if not row.get("sector_entry_ok", True):
+                return "HOLD"
+
             is_breakout = row.get("is_breakout", False)
             ff_confirmed = row.get("ff_confirmed", False)
             rsi = row.get("rsi", 50)
@@ -282,16 +299,40 @@ class SignalCombiner:
         return "HOLD"
 
     def generate_signals_universe(self, universe_prices, ihsg_df,
-                                   foreign_flows=None, broker_data=None):
+                                   foreign_flows=None, broker_data=None,
+                                   stock_sectors=None):
         foreign_flows = foreign_flows or {}
         broker_data = broker_data or {}
-        all_signals = {}
+        stock_sectors = stock_sectors or {}
 
+        # Exp 11: Compute sector cohort entry_ok series once, reuse per ticker.
+        # No-op (empty dict) when stock_sectors not provided or flag disabled.
+        sector_entry_ok_map: Dict[str, pd.Series] = {}
+        if stock_sectors and getattr(
+            self.config.regime, "exp11_sector_filter_enabled", False
+        ):
+            sector_filter = SectorRegimeFilter(
+                ma_period=getattr(
+                    self.config.regime, "exp11_sector_ma_period", 20
+                )
+            )
+            sector_entry_ok_map = sector_filter.compute_sector_entry_ok(
+                universe_prices, stock_sectors
+            )
+
+        all_signals = {}
         for ticker, price_df in universe_prices.items():
             try:
+                ticker_sector = stock_sectors.get(ticker, "")
+                sector_series = (
+                    sector_entry_ok_map.get(ticker_sector)
+                    if ticker_sector
+                    else None
+                )
                 sig_df = self.generate_signals(
                     ticker, price_df, ihsg_df, universe_prices,
                     foreign_flows.get(ticker), broker_data.get(ticker),
+                    sector_entry_ok_series=sector_series,
                 )
                 all_signals[ticker] = sig_df
             except Exception as e:

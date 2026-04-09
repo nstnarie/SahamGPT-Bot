@@ -62,6 +62,7 @@ class BacktestEngine:
         logger.info("Pre-computing signals for all stocks...")
         all_signals = self.signal_combiner.generate_signals_universe(
             universe_prices, ihsg_df, foreign_flows, broker_data,
+            stock_sectors=stock_sectors,
         )
 
         # Build trading calendar
