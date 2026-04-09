@@ -89,6 +89,8 @@ class BacktestEngine:
         pending_entries: Dict[str, float] = {}
         cooldown_until: Dict[str, object] = {}
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
+        consecutive_losses = 0          # Exp 12: consecutive loss counter
+        throttle_until = None           # Exp 12: date when 2-entry cap expires
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -113,7 +115,9 @@ class BacktestEngine:
                 recent_cutoff_idx = max(0, i - lookback)
                 recent_cutoff_date = trading_dates[recent_cutoff_idx]
                 recent_count = sum(1 for d in recent_entry_dates if d >= recent_cutoff_date)
-                max_week = self.config.entry.max_entries_per_week
+                # Exp 12: after 3 consecutive losses, cap new entries at 2 for 10 trading days
+                throttled = throttle_until is not None and current_date < throttle_until
+                max_week = 2 if throttled else self.config.entry.max_entries_per_week
                 if recent_count >= max_week:
                     pending_entries.clear()
                     continue
@@ -279,6 +283,14 @@ class BacktestEngine:
 
                     if pos.remaining_shares <= 0:
                         tickers_to_exit.append(ticker)
+                        # Exp 12: track consecutive losses on fully closed positions
+                        if pnl < 0:
+                            consecutive_losses += 1
+                            if consecutive_losses >= 3:
+                                throttle_until = trading_dates[min(i + 10, len(trading_dates) - 1)]
+                                consecutive_losses = 0
+                        else:
+                            consecutive_losses = 0
 
             for t in tickers_to_exit:
                 del portfolio.positions[t]
