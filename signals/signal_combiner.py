@@ -286,6 +286,13 @@ class SignalCombiner:
             if not row.get("sector_entry_ok", True):
                 return "HOLD"
 
+            # Exp 10: skip entries when ATR > 7% of close — stock is too whippy,
+            # high risk of triggering emergency stop before setup plays out.
+            atr = row.get("atr", 0)
+            close = row.get("close", 1)
+            if close > 0 and atr / close > 0.07:
+                return "HOLD"
+
             is_breakout = row.get("is_breakout", False)
             ff_confirmed = row.get("ff_confirmed", False)
             rsi = row.get("rsi", 50)
