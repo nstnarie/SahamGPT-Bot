@@ -59,7 +59,7 @@ class MarketRegimeConfig:
     # Skip entry when the ticker's sector cohort is below its own SMA.
     # Symmetric with Exp 2 IHSG filter (close > MA20), but applied per-sector.
     # See signals/sector_regime.py.
-    exp11_sector_filter_enabled: bool = True
+    exp11_sector_filter_enabled: bool = False
     exp11_sector_ma_period: int = 20
 
 

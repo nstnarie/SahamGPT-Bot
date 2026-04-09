@@ -160,20 +160,19 @@ class PortfolioManager:
                                ff_consecutive_sell=0, current_ma10=None,
                                is_foreign_driven=False, acc_score=0):
         """
-        Exit logic v8 (Exp 9 added):
+        Exit logic v8:
 
         1. Emergency stop: -15% at ANY time (even during hold period)
         2. During first 5 days: NO regular stop-loss
-        3. No follow-through exit (Exp 9): day 8+, never reached +1% → exit
-        4. HIGH PERFORMERS (+15%): trend exit — close < MA10
-        5. Stop-loss: -7% or 1.5xATR, cap -10% (after day 5)
+        3. HIGH PERFORMERS (+15%): trend exit — close < MA10
+        4. Stop-loss: -7% or 1.5xATR, cap -10% (after day 5)
            → Hold extension: if acc_score > 0 on days 6-10, skip stop once —
              brokers are still accumulating, dip is likely temporary
-        6. Partial profit: sell 30% at +15%
-        7. Time exit: 15 days no +3%
-        8. FF exit: 5 consecutive days net foreign sell (ONLY for foreign-driven stocks,
+        5. Partial profit: sell 30% at +15%
+        6. Time exit: 15 days no +3%
+        7. FF exit: 5 consecutive days net foreign sell (ONLY for foreign-driven stocks,
            and ONLY when stock is also losing momentum — not when it's still rising)
-        9. Regime exit: BEAR → close all
+        8. Regime exit: BEAR → close all
         """
         profit_pct = (current_close - position.entry_price) / position.entry_price
 
@@ -193,13 +192,7 @@ class PortfolioManager:
 
         # === After min_hold_days ===
 
-        # 3. EXP 9: NO FOLLOW-THROUGH EXIT
-        # If price never reached +1% above entry by day 8, the breakout is fading.
-        # Cut early before the -7% stop fires on days 6-10.
-        if position.days_held >= 8 and position.highest_close < position.entry_price * 1.01:
-            return "NO_FOLLOWTHROUGH", 1.0
-
-        # 4. HIGH PERFORMER TREND EXIT
+        # 3. HIGH PERFORMER TREND EXIT
         if position.in_trend_mode and current_ma10 is not None:
             if current_close < current_ma10:
                 return "TREND_EXIT", 1.0
