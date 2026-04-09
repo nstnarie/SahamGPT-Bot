@@ -127,18 +127,47 @@ jobs:
           python3 << 'EOF'
           import sqlite3, time
           import yfinance as yf
-          from datetime import date
+          from datetime import date, timedelta
 
           DB = "idx_swing_trader.db"
           START = "2021-01-01"
 
+          # Warmup window: 5 months (~150 days) before backtest start.
+          # Tickers with no price data going back this far are treated as missing.
+          backtest_start = "${{ github.event.inputs.start_date }}"
+          try:
+              from datetime import datetime
+              warmup_dt = datetime.strptime(backtest_start, "%Y-%m-%d").date() - timedelta(days=150)
+              warmup_start = warmup_dt.strftime("%Y-%m-%d")
+          except Exception:
+              warmup_start = "2023-01-01"
+          print(f"Backtest start: {backtest_start}, warmup start: {warmup_start}")
+
           conn = sqlite3.connect(DB)
 
-          # Find tickers with broker data but no price data
-          missing = conn.execute("""
+          # Ensure daily_prices table exists before querying it
+          conn.execute("""
+              CREATE TABLE IF NOT EXISTS daily_prices (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ticker TEXT NOT NULL,
+                  date TEXT NOT NULL,
+                  open REAL, high REAL, low REAL, close REAL,
+                  volume REAL, value REAL, adj_close REAL,
+                  UNIQUE(ticker, date)
+              )
+          """)
+          conn.commit()
+
+          # Find tickers with broker data but no price data in the warmup window.
+          # This catches both completely missing tickers AND tickers that only have
+          # data from a later period (e.g. 2025-only when we need 2024 data).
+          missing = conn.execute(f"""
               SELECT DISTINCT b.ticker
               FROM broker_summary b
-              LEFT JOIN daily_prices d ON b.ticker = d.ticker
+              LEFT JOIN (
+                  SELECT DISTINCT ticker FROM daily_prices
+                  WHERE date >= '{warmup_start}'
+              ) d ON b.ticker = d.ticker
               WHERE d.ticker IS NULL
               ORDER BY b.ticker
           """).fetchall()
@@ -146,10 +175,10 @@ jobs:
           conn.close()
 
           if not missing:
-              print("All tickers have price data — skipping backfill")
+              print("All tickers have price data in the required date range — skipping backfill")
               exit(0)
 
-          print(f"Backfilling price data for: {missing}")
+          print(f"Backfilling price data for {len(missing)} tickers: {missing}")
 
           conn = sqlite3.connect(DB)
           for ticker in missing:
@@ -165,8 +194,20 @@ jobs:
 
                   df = df.reset_index()
                   df.columns = [c.lower().replace(" ", "_") for c in df.columns]
+
+                  # Normalise date column — yfinance may return "date" or "datetime"
                   if "date" in df.columns:
-                      df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+                      df["date"] = df["date"].apply(
+                          lambda x: x.strftime("%Y-%m-%d") if hasattr(x, "strftime") else str(x)[:10]
+                      )
+                  elif "datetime" in df.columns:
+                      df["date"] = df["datetime"].apply(
+                          lambda x: x.strftime("%Y-%m-%d") if hasattr(x, "strftime") else str(x)[:10]
+                      )
+                  else:
+                      print(f"    Cannot find date column for {yf_ticker}, skipping")
+                      continue
+
                   if "adj_close" not in df.columns:
                       df["adj_close"] = df["close"]
                   df["value"] = df["close"] * df["volume"]
