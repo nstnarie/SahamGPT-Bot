@@ -91,7 +91,6 @@ class BacktestEngine:
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
         consecutive_losses = 0          # Exp 12: consecutive loss counter
         throttle_until = None           # Exp 12: date when 2-entry cap expires
-        stopped_breakout_levels: Dict[str, float] = {}  # Exp 17: breakout level at stop-loss
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -128,19 +127,8 @@ class BacktestEngine:
                         break
 
                     # Cooldown check
-                    # Exp 17: bypass cooldown if new signal's close is above the 60d high
-                    # that was broken when the position was stopped out.  This indicates
-                    # genuine trend resumption rather than a re-test of a failed level.
                     if ticker in cooldown_until and current_date < cooldown_until[ticker]:
-                        bypassed = False
-                        if ticker in stopped_breakout_levels and i > 0:
-                            sig_day = trading_dates[i - 1]
-                            sig_df_check = all_signals.get(ticker)
-                            if sig_df_check is not None and sig_day in sig_df_check.index:
-                                if sig_df_check.loc[sig_day, "close"] > stopped_breakout_levels[ticker]:
-                                    bypassed = True
-                        if not bypassed:
-                            continue
+                        continue
 
                     if ticker in current_data and ticker not in portfolio.positions:
                         row = current_data[ticker]
@@ -203,15 +191,6 @@ class BacktestEngine:
                                 portfolio.cash -= buy["total_cost"]
                                 entries_today += 1
                                 recent_entry_dates.append(current_date)
-                                # Exp 17: record the 60d breakout level for this entry
-                                if i > 0:
-                                    sig_day = trading_dates[i - 1]
-                                    sig_df_e17 = all_signals.get(ticker)
-                                    if sig_df_e17 is not None and sig_day in sig_df_e17.index:
-                                        pos.entry_breakout_level = float(
-                                            sig_df_e17.loc[sig_day].get("high_Nd", 0) or 0
-                                        )
-                                stopped_breakout_levels.pop(ticker, None)
 
                 pending_entries.clear()
 
@@ -300,9 +279,6 @@ class BacktestEngine:
                         cooldown_days = self.config.exit.stop_loss_cooldown_days
                         future_idx = min(i + cooldown_days, len(trading_dates) - 1)
                         cooldown_until[ticker] = trading_dates[future_idx]
-                        # Exp 17: on stop-loss, save breakout level so next signal can bypass cooldown
-                        if exit_reason == "STOP_LOSS":
-                            stopped_breakout_levels[ticker] = pos.entry_breakout_level
 
                     if pos.remaining_shares <= 0:
                         tickers_to_exit.append(ticker)

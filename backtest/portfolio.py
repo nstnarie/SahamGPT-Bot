@@ -34,8 +34,6 @@ class Position:
     days_held: int = 0
     # NEW: track if this position is in "trend mode" (high performer)
     in_trend_mode: bool = False
-    # Exp 17: the 60d high that was broken on entry (for cooldown bypass logic)
-    entry_breakout_level: float = 0.0
 
 
 @dataclass
