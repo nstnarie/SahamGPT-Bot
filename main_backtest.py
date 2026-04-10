@@ -80,6 +80,7 @@ def main():
     config.backtest.start_date = args.start
     config.backtest.end_date = args.end
     config.backtest.initial_capital = args.capital
+    config.technical.exp13_rsi_upper_removed = True  # Exp 13: remove RSI upper bound
 
     tickers = args.tickers or LQ45_TICKERS
     logger.info(f"Universe: {len(tickers)} stocks")

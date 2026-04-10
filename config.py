@@ -102,6 +102,8 @@ class TechnicalConfig:
     macd_signal: int = 9
     price_above_ema: int = 50
     entry_volume_multiplier: float = 1.5
+    # Exp 13: remove RSI upper bound (rsi_max) — off by default, enabled in backtest only
+    exp13_rsi_upper_removed: bool = False
 
 
 @dataclass
