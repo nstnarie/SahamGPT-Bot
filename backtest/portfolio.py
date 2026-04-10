@@ -34,8 +34,6 @@ class Position:
     days_held: int = 0
     # NEW: track if this position is in "trend mode" (high performer)
     in_trend_mode: bool = False
-    # Exp 19: trend leader flag — widens stop to -15%/3×ATR when confirmed uptrend
-    trend_leader: bool = False
 
 
 @dataclass
@@ -160,8 +158,7 @@ class PortfolioManager:
     def check_exit_conditions(self, position, current_close, current_low,
                                current_atr, composite_score, regime, trading_day,
                                ff_consecutive_sell=0, current_ma10=None,
-                               is_foreign_driven=False, acc_score=0,
-                               current_ma50=None):
+                               is_foreign_driven=False, acc_score=0):
         """
         Exit logic v8:
 
@@ -204,26 +201,7 @@ class PortfolioManager:
             return "", 0.0
 
         # 4. REGULAR STOP-LOSS
-        # Exp 19: trend leaders (≥10 days held, ≥+10% PnL, close > MA50) get a
-        # wider stop — max(entry×0.85, entry−3×ATR) — to survive mid-move shakeouts.
-        # 86% of 2025 mega-winners had >20% drawdowns mid-move; regular −7% stop
-        # cuts them before they recover. Emergency stop (-12%) still fires above this.
-        profit_pct_for_leader = (current_close - position.entry_price) / position.entry_price
-        above_ma50 = (current_ma50 is None or current_close > current_ma50)
-        if (position.days_held >= 10
-                and profit_pct_for_leader >= 0.10
-                and above_ma50):
-            position.trend_leader = True
-
-        if position.trend_leader:
-            effective_stop = max(
-                position.entry_price * 0.85,
-                position.entry_price - 3 * position.entry_atr,
-            )
-        else:
-            effective_stop = position.stop_price
-
-        if current_low <= effective_stop:
+        if current_low <= position.stop_price:
             # Hold extension: days 6-10 only — if Asing brokers are still
             # net-accumulating (acc_score > 0), skip the stop once.
             # Rationale: the dip is being bought by institutions → likely temporary.
