@@ -87,6 +87,7 @@ class BacktestEngine:
         equity_history = {}
         completed_trades: List[Trade] = []
         pending_entries: Dict[str, float] = {}
+        a_tier_pending: Dict[str, float] = {}   # Exp 18: top-2 strength signals, bypass cluster + Exp12
         cooldown_until: Dict[str, object] = {}
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
         consecutive_losses = 0          # Exp 12: consecutive loss counter
@@ -104,13 +105,11 @@ class BacktestEngine:
             portfolio.update_equity(current_prices)
 
             # ── 1. Execute pending entries ──
-            if pending_entries:
-                sorted_entries = sorted(pending_entries.items(), key=lambda x: x[1], reverse=True)
+            if pending_entries or a_tier_pending:
                 max_entries = self.config.exit.max_entries_per_day
                 entries_today = 0
 
                 # Rolling 10-day cluster limit: prevent overtrading during fake breakout weeks
-                # If >= max_entries_per_week entries were made in the last 10 trading days, pause
                 lookback = 10
                 recent_cutoff_idx = max(0, i - lookback)
                 recent_cutoff_date = trading_dates[recent_cutoff_idx]
@@ -118,15 +117,19 @@ class BacktestEngine:
                 # Exp 12: after 3 consecutive losses, cap new entries at 2 for 10 trading days
                 throttled = throttle_until is not None and current_date < throttle_until
                 max_week = 2 if throttled else self.config.entry.max_entries_per_week
-                if recent_count >= max_week:
-                    pending_entries.clear()
-                    continue
+                cluster_blocked = (recent_count >= max_week)
 
-                for ticker, signal_score in sorted_entries:
+                # Exp 18: A-tier bypasses cluster limit and Exp 12 throttle.
+                # Normal entries are skipped when cluster is blocked.
+                candidates = sorted(a_tier_pending.items(), key=lambda x: x[1], reverse=True)
+                if not cluster_blocked:
+                    candidates = candidates + sorted(pending_entries.items(), key=lambda x: x[1], reverse=True)
+
+                for ticker, signal_score in candidates:
                     if entries_today >= max_entries:
                         break
 
-                    # Cooldown check
+                    # Cooldown check — not bypassed even for A-tier
                     if ticker in cooldown_until and current_date < cooldown_until[ticker]:
                         continue
 
@@ -193,6 +196,7 @@ class BacktestEngine:
                                 recent_entry_dates.append(current_date)
 
                 pending_entries.clear()
+                a_tier_pending.clear()
 
             # ── 2. Check exits ──
             tickers_to_exit = []
@@ -295,6 +299,9 @@ class BacktestEngine:
                 del portfolio.positions[t]
 
             # ── 3. Generate entry signals ──
+            # Exp 18: compute strength score for each BUY signal, pick top 2 as A-tier.
+            # A-tier will bypass cluster limit and Exp 12 throttle in Step 1.
+            buy_candidates: Dict[str, tuple] = {}  # ticker -> (vol_ratio, strength)
             for ticker, sig_df in all_signals.items():
                 if ticker in portfolio.positions:
                     continue
@@ -305,7 +312,22 @@ class BacktestEngine:
 
                 sig_row = sig_df.loc[current_date]
                 if sig_row.get("signal") == "BUY":
-                    pending_entries[ticker] = sig_row.get("vol_ratio", 1.0)
+                    vol_r = float(sig_row.get("vol_ratio", 1.0))
+                    close = float(sig_row.get("close", 0))
+                    high_nd = float(sig_row.get("high_Nd", 0))
+                    strength = vol_r * (close / high_nd - 1) if high_nd > 0 else 0.0
+                    buy_candidates[ticker] = (vol_r, max(strength, 0.0))
+
+            if buy_candidates:
+                sorted_by_strength = sorted(
+                    buy_candidates.items(), key=lambda x: x[1][1], reverse=True
+                )
+                a_tier_set = {t for t, _ in sorted_by_strength[:2]}
+                for ticker, (vol_r, strength) in buy_candidates.items():
+                    if ticker in a_tier_set:
+                        a_tier_pending[ticker] = strength
+                    else:
+                        pending_entries[ticker] = vol_r
 
             # ── 4. Record equity ──
             portfolio.update_equity(current_prices)
