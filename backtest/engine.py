@@ -214,12 +214,14 @@ class BacktestEngine:
                     atr = sig_row.get("atr", atr)
                     ff_consecutive_sell = int(sig_row.get("ff_consecutive_sell", 0))
 
-                # Get MA10, is_foreign_driven, and accumulation score for exit logic
+                # Get MA10, MA50, is_foreign_driven, and accumulation score for exit logic
                 current_ma10 = None
+                current_ma50 = None
                 is_foreign_driven = False
                 acc_score = 0
                 if sig_df is not None and current_date in sig_df.index:
                     current_ma10 = sig_df.loc[current_date].get("ma_10", None)
+                    current_ma50 = sig_df.loc[current_date].get("ma_50", None)
                     is_foreign_driven = bool(sig_df.loc[current_date].get("is_foreign_driven", False))
                     acc_score = float(sig_df.loc[current_date].get("accumulation_score", 0))
 
@@ -233,6 +235,7 @@ class BacktestEngine:
                     current_ma10=current_ma10,
                     is_foreign_driven=is_foreign_driven,
                     acc_score=acc_score,
+                    current_ma50=current_ma50,
                 )
 
                 if exit_reason and fraction > 0:
