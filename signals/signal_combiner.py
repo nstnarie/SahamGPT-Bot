@@ -147,18 +147,11 @@ class SignalCombiner:
             (df["close_position"] < 0.33)         # close near the low
         )
 
-        # Exp 14: optionally remove volume spike upper cap
-        vol_cap_ok = (
-            pd.Series(True, index=df.index)
-            if getattr(cfg, "exp14_volume_cap_removed", False)
-            else (df["vol_ratio"] <= cfg.volume_spike_max)
-        )
-
         # Breakout conditions
         df["is_breakout"] = (
             (df["close"] > df["high_Nd"]) &               # breaks resistance
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
-            vol_cap_ok &                                   # not pump-and-dump (unless cap removed)
+            (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
             (df["close"] > df["ma_50"]) &                 # above MA50 (uptrend)
             (df["close"] >= min_price) &                  # minimum price filter
             (~df["has_selling_pressure"]) &               # NO selling pressure

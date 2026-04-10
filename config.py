@@ -78,8 +78,6 @@ class BreakoutConfig:
     # Volume spike on breakout day
     volume_spike_min: float = 1.5
     volume_spike_max: float = 5.0
-    # Exp 14: remove volume spike upper cap — off by default, enabled in backtest only
-    exp14_volume_cap_removed: bool = False
 
     # Price must be above this MA
     trend_ma_period: int = 50
