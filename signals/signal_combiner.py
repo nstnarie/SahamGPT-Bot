@@ -291,12 +291,9 @@ class SignalCombiner:
             rsi = row.get("rsi", 50)
             macd_hist = row.get("macd_histogram", 0)
 
-            # Exp 13: optionally remove RSI upper bound — only when flag set in config
-            rsi_ok = (rsi >= self.config.technical.rsi_min) if getattr(
-                self.config.technical, "exp13_rsi_upper_removed", False
-            ) else (self.config.technical.rsi_min <= rsi <= self.config.technical.rsi_max)
-
-            if is_breakout and ff_confirmed and rsi_ok and macd_hist > 0:
+            if (is_breakout and ff_confirmed
+                    and self.config.technical.rsi_min <= rsi <= self.config.technical.rsi_max
+                    and macd_hist > 0):
                 return "BUY"
 
         return "HOLD"
