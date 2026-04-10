@@ -34,9 +34,6 @@ class Position:
     days_held: int = 0
     # NEW: track if this position is in "trend mode" (high performer)
     in_trend_mode: bool = False
-    # Exp 21: breakout level at entry (high_Nd); used to track shake-out re-entries
-    entry_breakout_level: float = 0.0
-    is_reentry: bool = False
 
 
 @dataclass

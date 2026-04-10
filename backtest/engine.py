@@ -87,9 +87,7 @@ class BacktestEngine:
         equity_history = {}
         completed_trades: List[Trade] = []
         pending_entries: Dict[str, float] = {}
-        reentry_pending: Dict[str, float] = {}  # Exp 21: tickers queued for 50%-size re-entry
         cooldown_until: Dict[str, object] = {}
-        stopped_positions: Dict[str, Tuple[int, float]] = {}  # Exp 21: ticker -> (stop_idx, breakout_level)
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
         consecutive_losses = 0          # Exp 12: consecutive loss counter
         throttle_until = None           # Exp 12: date when 2-entry cap expires
@@ -106,7 +104,8 @@ class BacktestEngine:
             portfolio.update_equity(current_prices)
 
             # ── 1. Execute pending entries ──
-            if pending_entries or reentry_pending:
+            if pending_entries:
+                sorted_entries = sorted(pending_entries.items(), key=lambda x: x[1], reverse=True)
                 max_entries = self.config.exit.max_entries_per_day
                 entries_today = 0
 
@@ -119,22 +118,17 @@ class BacktestEngine:
                 # Exp 12: after 3 consecutive losses, cap new entries at 2 for 10 trading days
                 throttled = throttle_until is not None and current_date < throttle_until
                 max_week = 2 if throttled else self.config.entry.max_entries_per_week
-                cluster_blocked = (recent_count >= max_week)
+                if recent_count >= max_week:
+                    pending_entries.clear()
+                    continue
 
-                # Exp 21: re-entries bypass cooldown and cluster limit; normal entries do not
-                sorted_reentries = sorted(reentry_pending.items(), key=lambda x: x[1], reverse=True)
-                sorted_normal = [] if cluster_blocked else sorted(pending_entries.items(), key=lambda x: x[1], reverse=True)
-                all_candidates = [(t, s, True) for t, s in sorted_reentries] + \
-                                 [(t, s, False) for t, s in sorted_normal]
-
-                for ticker, signal_score, is_reentry in all_candidates:
+                for ticker, signal_score in sorted_entries:
                     if entries_today >= max_entries:
                         break
 
-                    # Cooldown check — bypassed for Exp 21 re-entries
-                    if not is_reentry:
-                        if ticker in cooldown_until and current_date < cooldown_until[ticker]:
-                            continue
+                    # Cooldown check
+                    if ticker in cooldown_until and current_date < cooldown_until[ticker]:
+                        continue
 
                     if ticker in current_data and ticker not in portfolio.positions:
                         row = current_data[ticker]
@@ -174,9 +168,6 @@ class BacktestEngine:
                         shares = self.portfolio_mgr.calculate_position_size(
                             portfolio, open_price, atr, sector, exposure_mult,
                         )
-                        # Exp 21: re-entries use 50% normal size
-                        if is_reentry:
-                            shares = round_to_lot(shares // 2)
 
                         if shares >= 100:
                             buy = compute_buy_cost(open_price, shares)
@@ -184,10 +175,6 @@ class BacktestEngine:
                                 stop = self.portfolio_mgr.calculate_initial_stop(
                                     buy["exec_price"], atr,
                                 )
-                                # Exp 21: store breakout level and re-entry flag
-                                entry_breakout_level = 0.0
-                                if sig_df is not None and current_date in sig_df.index:
-                                    entry_breakout_level = float(sig_df.loc[current_date].get("high_Nd", 0) or 0)
                                 pos = Position(
                                     ticker=ticker,
                                     entry_date=current_date.date() if hasattr(current_date, 'date') else current_date,
@@ -199,8 +186,6 @@ class BacktestEngine:
                                     highest_close=buy["exec_price"],
                                     sector=sector,
                                     entry_atr=atr,
-                                    entry_breakout_level=entry_breakout_level,
-                                    is_reentry=is_reentry,
                                 )
                                 portfolio.positions[ticker] = pos
                                 portfolio.cash -= buy["total_cost"]
@@ -208,7 +193,6 @@ class BacktestEngine:
                                 recent_entry_dates.append(current_date)
 
                 pending_entries.clear()
-                reentry_pending.clear()
 
             # ── 2. Check exits ──
             tickers_to_exit = []
@@ -298,13 +282,6 @@ class BacktestEngine:
 
                     if pos.remaining_shares <= 0:
                         tickers_to_exit.append(ticker)
-                        # Exp 21: on STOP_LOSS, record breakout level for potential re-entry.
-                        # On re-entry that also stops → remove from stopped_positions (max 1 re-entry).
-                        if exit_reason == "STOP_LOSS":
-                            if pos.is_reentry:
-                                stopped_positions.pop(ticker, None)
-                            elif pos.entry_breakout_level > 0:
-                                stopped_positions[ticker] = (i, pos.entry_breakout_level)
                         # Exp 12: track consecutive losses on fully closed positions
                         if pnl < 0:
                             consecutive_losses += 1
@@ -318,13 +295,6 @@ class BacktestEngine:
                 del portfolio.positions[t]
 
             # ── 3. Generate entry signals ──
-            # Exp 21: expire stopped_positions older than 60 trading days
-            stopped_positions = {
-                t: (stop_idx, lvl)
-                for t, (stop_idx, lvl) in stopped_positions.items()
-                if i - stop_idx <= 60
-            }
-
             for ticker, sig_df in all_signals.items():
                 if ticker in portfolio.positions:
                     continue
@@ -335,13 +305,7 @@ class BacktestEngine:
 
                 sig_row = sig_df.loc[current_date]
                 if sig_row.get("signal") == "BUY":
-                    vol_r = sig_row.get("vol_ratio", 1.0)
-                    # Exp 21: if this ticker was previously stopped within 60 days,
-                    # queue as a re-entry (50% size, cooldown bypassed)
-                    if ticker in stopped_positions:
-                        reentry_pending[ticker] = vol_r
-                    else:
-                        pending_entries[ticker] = vol_r
+                    pending_entries[ticker] = sig_row.get("vol_ratio", 1.0)
 
             # ── 4. Record equity ──
             portfolio.update_equity(current_prices)
