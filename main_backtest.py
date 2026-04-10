@@ -80,6 +80,7 @@ def main():
     config.backtest.start_date = args.start
     config.backtest.end_date = args.end
     config.backtest.initial_capital = args.capital
+    config.breakout.exp14_volume_cap_removed = True  # Exp 14: remove volume spike upper cap
 
     tickers = args.tickers or LQ45_TICKERS
     logger.info(f"Universe: {len(tickers)} stocks")
