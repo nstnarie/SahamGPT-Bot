@@ -120,13 +120,8 @@ class SignalCombiner:
             df["vol_ratio"] = df["volume"] / df["vol_avg_20"].replace(0, np.nan)
             df["vol_ratio"] = df["vol_ratio"].fillna(1.0)
 
-        # Minimum price / liquidity filter
+        # Minimum price filter
         min_price = self.config.universe.min_stock_price
-
-        # Exp 20: compute ADV20 (avg daily value) for liquidity floor
-        if "adv20" not in df.columns:
-            daily_value = df["close"] * df["volume"]
-            df["adv20"] = daily_value.rolling(20, min_periods=5).mean()
 
         # ── NEW: Selling pressure detection (long upper shadow) ──
         # A candle with a long upper shadow means: price went up during the day
@@ -152,19 +147,13 @@ class SignalCombiner:
             (df["close_position"] < 0.33)         # close near the low
         )
 
-        # Exp 20: liquidity floor replaces min_stock_price
-        if getattr(cfg, "exp20_liquidity_floor_enabled", False):
-            liquidity_ok = df["adv20"] >= cfg.exp20_min_adv
-        else:
-            liquidity_ok = df["close"] >= min_price
-
         # Breakout conditions
         df["is_breakout"] = (
             (df["close"] > df["high_Nd"]) &               # breaks resistance
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
             (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
             (df["close"] > df["ma_50"]) &                 # above MA50 (uptrend)
-            liquidity_ok &                                 # price or liquidity filter
+            (df["close"] >= min_price) &                  # minimum price filter
             (~df["has_selling_pressure"]) &               # NO selling pressure
             (df["high_Nd"].notna())                       # enough data
         )

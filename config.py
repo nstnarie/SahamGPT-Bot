@@ -82,10 +82,6 @@ class BreakoutConfig:
     # Price must be above this MA
     trend_ma_period: int = 50
 
-    # Exp 20: replace min_stock_price with ADV (avg daily value) floor — off by default
-    exp20_liquidity_floor_enabled: bool = False
-    exp20_min_adv: float = 2_000_000_000  # Rp 2bn ADV20
-
 
 
 @dataclass
