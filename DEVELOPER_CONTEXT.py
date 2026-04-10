@@ -208,11 +208,39 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — Exp 8 REJECTED. 28-ticker scrape Run 1 still in progress (main). Next: complete Runs 2-8 for 28 tickers, then implement Exp 9 (early no-follow-through exit)."
+STATUS = (
+    "ACTIVE — Exp 13–24 experiment sequence in progress (feature/v10-experiments). "
+    "Step 0 + Step 1 complete (Exp 9/11 residue removed). "
+    "Exp 17 REJECTED (cooldown bypass fired too early). "
+    "Next: Exp 18 (A-tier cluster exemption). "
+    "NEW correct baselines: 2024 PF 0.54 / −4.14% | 2025 PF 3.63 / +17.70% "
+    "(runs 24220505468 / 24220636277)."
+)
 
 CURRENT_VERSION = "v10-experiments (feature branch)"
 
 LATEST_BACKTEST_RESULTS = {
+    "2024_clean_baseline_v10exp": {
+        "trades": 34, "win_rate": "38.2%", "pnl": "Rp -41M", "pf": 0.54,
+        "total_return": "-4.14%", "max_drawdown": "-4.84%", "max_dd_days": 197,
+        "sharpe": -1.78, "sortino": -2.20, "calmar": -0.91, "exposure": "56.1%",
+        "note": "CURRENT 2024 BASELINE — feature/v10-experiments, post Exp 9/11 cleanup, "
+                "Exp 2+4+12 active, 109 tickers, real_broker=true. "
+                "Supersedes run 24199627413 which had Exp 9 NO_FOLLOWTHROUGH residue.",
+        "run_id": "24220505468",
+        "date": "2026-04-10",
+    },
+    "2025_clean_baseline_v10exp": {
+        "trades": 35, "win_rate": "48.6%", "pnl": "Rp +177M", "pf": 3.63,
+        "total_return": "17.70%", "max_drawdown": "-3.38%", "max_dd_days": 51,
+        "sharpe": 1.54, "sortino": 3.01, "calmar": 5.64, "exposure": "69.9%",
+        "benchmark_return": "20.71%", "benchmark_max_dd": "-17.76%",
+        "note": "CURRENT 2025 BASELINE — feature/v10-experiments, post Exp 9/11 cleanup, "
+                "Exp 2+4+12 active, 109 tickers, real_broker=true. "
+                "Supersedes run 24199629162. Cleanup improved both years.",
+        "run_id": "24220636277",
+        "date": "2026-04-10",
+    },
     "2025_synthetic": {
         "trades": 55, "win_rate": "31%", "pnl": "Rp +60M", "pf": 1.38,
         "note": "SUPERSEDED. Used synthetic FF from ForeignFlow table.",
@@ -276,6 +304,35 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp17_cooldown_bypass_new_60d_high": {
+        "hypothesis": "The blanket 30d post-STOP_LOSS cooldown locks out real trend resumption. "
+                      "Bypassing it when the stock makes a new 60d-high close above the pre-stop "
+                      "breakout level preserves protection while allowing re-entry on genuine continuation. "
+                      "Reference cases: ADRO (Apr stop → Nov rally), TOTL (Aug stop → Oct rally), "
+                      "PNBN/LINK/JPFA ALL-PASS days ignored in 2024.",
+        "change": "backtest/portfolio.py: added entry_breakout_level field to Position. "
+                  "backtest/engine.py: on STOP_LOSS, record entry_breakout_level → stopped_breakout_levels[ticker]. "
+                  "On new BUY signal during cooldown: if signal_day.close > stopped_breakout_levels[ticker] → bypass.",
+        "result": {
+            "2024": {"trades": 38, "win_rate": "31.6%", "total_return": "-7.79%",
+                     "max_drawdown": "-7.96%", "pf": 0.33, "sharpe": -2.42},
+            "2025": {"trades": 35, "win_rate": "48.6%", "total_return": "+17.70%",
+                     "max_drawdown": "-3.38%", "pf": 3.63, "sharpe": 1.54,
+                     "note": "ZERO bypasses fired in 2025 — result identical to clean baseline"},
+        },
+        "vs_baseline": "2024: PF 0.54→0.33 WORSE (−0.21), return −4.14%→−7.79% (−3.65pp). "
+                       "2025: no change (0 bypasses). Winning trades: 13→12 (−1). "
+                       "New 2024 trades unlocked: TOTL re-entry Aug 14 → EMERGENCY_STOP −13.72% "
+                       "(9 days after stop, trend hadn't resumed); BTPS → EMERGENCY_STOP −13.05%; "
+                       "EMTK re-entry Dec 9 → STOP_LOSS −9.06%. All bypassed re-entries were losers.",
+        "verdict": "REJECTED. Price-based bypass fires too early — close > old_breakout_level is "
+                   "satisfied almost immediately after a stop (stock just needs to tick up slightly). "
+                   "TOTL stopped Aug 5, bypass triggered Aug 14 (9 days later), real rally was Sep–Oct. "
+                   "⚠️ Any future cooldown bypass must add a minimum elapsed-time guard (≥ 15 trading days) "
+                   "in addition to the price condition. The concept is sound; the implementation is too loose.",
+        "run_ids": {"2024": "24203548317", "2025": "24203761354"},
+        "date": "2026-04-10",
+    },
     "exp8_breakout_margin_filter": {
         "hypothesis": "Require close >= 1.5% above 60-day high before confirming breakout. "
                       "Targets 56% fakeout-reversal signature in 2024 losers: 15/27 trades "
@@ -448,6 +505,13 @@ V10_EXPERIMENTS = {
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
+0. EXP 13–24 SEQUENCE — IN PROGRESS (Apr 10, 2026)
+   - Step 0 (sanity check): DONE ✅ — 5/22 mega-winners captured under Exp 12, same as original
+   - Step 1 (cleanup): DONE ✅ — Exp 9 NO_FOLLOWTHROUGH removed, Exp 11 disabled (commit 40a7600)
+   - New clean baselines established: 2024 run 24220505468 | 2025 run 24220636277
+   - Exp 17 REJECTED ❌ (commit 2dce49a reverted at 32107bb) — bypass too early, price-based only
+   - NEXT: Exp 18 (A-tier cluster exemption) — implement per v23 Section 8 spec
+
 1. BROKER SUMMARY DATA BACKFILL — 2025 FULLY COMPLETE ✅
    - H1 2025 (Jan–Jun): COMPLETE ✅ — 103–109 tickers/day
    - Q3 2025 (Jul–Sep): COMPLETE ✅ — 64 days, 105–107 tickers/day
