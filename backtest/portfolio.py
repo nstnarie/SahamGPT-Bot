@@ -180,12 +180,8 @@ class PortfolioManager:
         profit_pct = (current_close - position.entry_price) / position.entry_price
 
         # 1. EMERGENCY STOP — always active, even during hold period
-        # Exp 19: trend leaders get a wider emergency stop (-20% vs -12%) so the
-        # trend_leader floor (-15%) can actually fire before the emergency stop.
-        # Without this, emergency stop at -12% fires first, making the -15% floor unreachable.
-        emergency_threshold = 0.20 if position.trend_leader else self.exits.emergency_stop_pct
         emergency_loss = (current_low - position.entry_price) / position.entry_price
-        if emergency_loss <= -emergency_threshold:
+        if emergency_loss <= -self.exits.emergency_stop_pct:
             return "EMERGENCY_STOP", 1.0
 
         # 2. MINIMUM HOLD PERIOD
