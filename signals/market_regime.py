@@ -68,15 +68,10 @@ class MarketRegimeFilter:
         df["exposure_mult"] = df["regime"].map(self.cfg.exposure_multiplier)
 
         # Exp 2: IHSG entry filter — skip entries when IHSG is below MA20 or crashed >1% today
-        # Exp 16: optionally replace with simpler MA50-only gate
         df["ma_20"] = df["close"].rolling(20, min_periods=10).mean()
+        df["ihsg_above_ma20"] = df["close"] > df["ma_20"]
         df["ihsg_daily_return"] = df["close"].pct_change()
-        if getattr(self.cfg, "exp16_ihsg_gate_ma50_only", False):
-            df["ma_50_ihsg"] = df["close"].rolling(50, min_periods=30).mean()
-            df["ihsg_entry_ok"] = df["close"] > df["ma_50_ihsg"]
-        else:
-            df["ihsg_above_ma20"] = df["close"] > df["ma_20"]
-            df["ihsg_entry_ok"] = df["ihsg_above_ma20"] & (df["ihsg_daily_return"] > -0.01)
+        df["ihsg_entry_ok"] = df["ihsg_above_ma20"] & (df["ihsg_daily_return"] > -0.01)
 
         logger.info(
             f"Regime computed: "
