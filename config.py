@@ -62,6 +62,10 @@ class MarketRegimeConfig:
     exp11_sector_filter_enabled: bool = False
     exp11_sector_ma_period: int = 20
 
+    # Exp 16: Simplify IHSG entry gate — replace (MA20 + daily >-1%) with just MA50
+    # Coarser gate allows sector-leadership entries during index chop
+    exp16_ihsg_gate_ma50_only: bool = False
+
 
 @dataclass
 class BreakoutConfig:
