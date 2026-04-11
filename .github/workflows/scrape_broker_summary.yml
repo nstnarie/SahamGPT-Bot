@@ -43,11 +43,11 @@ jobs:
       - name: Download database artifact
         uses: dawidd6/action-download-artifact@v6
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: scrape_broker_summary.yml
           name: idx-database
           path: .
           if_no_artifact_found: warn
+          workflow_conclusion: ""
+          search_artifacts: true
         continue-on-error: true
 
       - name: Restore database

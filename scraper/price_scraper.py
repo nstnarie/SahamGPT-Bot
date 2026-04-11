@@ -201,6 +201,9 @@ LQ45_TICKERS = [
     "MYOR", "NCKL", "NIKL", "PNBN", "PTBA", "PTPP", "PTRO", "PWON", "RALS",
     "SCMA", "SIDO", "SILO", "SMRA", "SRTG", "SSMS",
     "TKIM", "TOTL", "TSPC", "WIKA", "WSBP", "WTON",
+
+    # ── Mega-winner targets (identified from Step 2 analysis) ──
+    "BREN", "CUAN", "DEWA", "ENRG", "KRAS", "SMDR", "WIFI", "WIIM",
 ]
 
 

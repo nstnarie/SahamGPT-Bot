@@ -227,12 +227,17 @@ class SignalCombiner:
 
     def _evaluate_signal(self, row):
         """
-        BUY: breakout + FF confirmed + regime not BEAR
+        BUY: breakout + regime not BEAR
         SELL: regime BEAR or FF heavily negative
 
         v10: removed RSI 40-75 and MACD > 0 checks.
         Step 2 analysis: 84% of mega-winners have RSI < 40 at trough (median 26),
         76% have negative MACD. These filters blocked 80% of mega-winners.
+
+        v11: removed ff_confirmed from BUY condition.
+        Step 2 analysis: FF at trough has d=-0.0001 (zero predictive power).
+        BTPS and KLBF had valid breakouts blocked only by this gate.
+        FF is kept as EXIT signal only (ff_consecutive_sell >= 5 → SELL).
         """
         exposure = row.get("exposure_mult", 0.5)
 
@@ -245,9 +250,8 @@ class SignalCombiner:
 
         if exposure > 0:
             is_breakout = row.get("is_breakout", False)
-            ff_confirmed = row.get("ff_confirmed", False)
 
-            if is_breakout and ff_confirmed:
+            if is_breakout:
                 return "BUY"
 
         return "HOLD"
