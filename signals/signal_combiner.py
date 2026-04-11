@@ -148,11 +148,12 @@ class SignalCombiner:
         )
 
         # Breakout conditions
+        # v10: removed close > ma_50 — Step 2 analysis showed 68% of mega-winners
+        # have bearish MA alignment at trough; requiring MA50 blocks 54% of them.
         df["is_breakout"] = (
             (df["close"] > df["high_Nd"]) &               # breaks resistance
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
             (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
-            (df["close"] > df["ma_50"]) &                 # above MA50 (uptrend)
             (df["close"] >= min_price) &                  # minimum price filter
             (~df["has_selling_pressure"]) &               # NO selling pressure
             (df["high_Nd"].notna())                       # enough data
@@ -265,8 +266,12 @@ class SignalCombiner:
 
     def _evaluate_signal(self, row):
         """
-        BUY: breakout + FF confirmed + RSI ok + MACD positive + regime not BEAR
+        BUY: breakout + FF confirmed + regime not BEAR
         SELL: regime BEAR or FF heavily negative
+
+        v10: removed RSI 40-75 and MACD > 0 checks.
+        Step 2 analysis: 84% of mega-winners have RSI < 40 at trough (median 26),
+        76% have negative MACD. These filters blocked 80% of mega-winners.
         """
         exposure = row.get("exposure_mult", 0.5)
 
@@ -288,12 +293,8 @@ class SignalCombiner:
 
             is_breakout = row.get("is_breakout", False)
             ff_confirmed = row.get("ff_confirmed", False)
-            rsi = row.get("rsi", 50)
-            macd_hist = row.get("macd_histogram", 0)
 
-            if (is_breakout and ff_confirmed
-                    and self.config.technical.rsi_min <= rsi <= self.config.technical.rsi_max
-                    and macd_hist > 0):
+            if is_breakout and ff_confirmed:
                 return "BUY"
 
         return "HOLD"
