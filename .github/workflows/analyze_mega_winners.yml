@@ -34,11 +34,46 @@ jobs:
           workflow_conclusion: success
           if_no_artifact_found: warn
 
-      - name: List downloaded files
+      - name: Merge split databases
         run: |
-          echo "=== Downloaded files ==="
-          ls -lah *.db 2>/dev/null || echo "No .db files found"
-          ls -lah idx_swing_trader.db 2>/dev/null || echo "idx_swing_trader.db not found"
+          python3 << 'EOF'
+          import sqlite3, os, shutil
+
+          PART_A = "idx_broker_part_a.db"
+          PART_B = "idx_broker_part_b.db"
+          OUTPUT = "idx_swing_trader.db"
+
+          if os.path.exists(OUTPUT):
+              count = sqlite3.connect(OUTPUT).execute(
+                  "SELECT COUNT(*) FROM broker_summary"
+              ).fetchone()[0]
+              if count > 400000:
+                  print(f"Artifact restored: {count:,} records")
+                  exit(0)
+
+          if not os.path.exists(PART_A):
+              print("No split files found, skipping merge")
+              exit(0)
+
+          shutil.copy(PART_A, OUTPUT)
+          conn = sqlite3.connect(OUTPUT)
+          if os.path.exists(PART_B):
+              conn.execute(f"ATTACH DATABASE '{PART_B}' AS part_b")
+              conn.execute("""
+                  INSERT OR IGNORE INTO broker_summary
+                      (ticker, date, broker_code, broker_type,
+                       buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume)
+                  SELECT ticker, date, broker_code, broker_type,
+                         buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume
+                  FROM part_b.broker_summary
+              """)
+              conn.commit()
+              conn.execute("DETACH DATABASE part_b")
+          count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          dates = conn.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
+          conn.close()
+          print(f"Merged DB: {count:,} records, {dates[0]} to {dates[1]}")
+          EOF
 
       - name: Run mega winners pattern analysis
         run: python scripts/analyze_mega_winners.py
