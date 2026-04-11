@@ -202,8 +202,16 @@ LQ45_TICKERS = [
     "SCMA", "SIDO", "SILO", "SMRA", "SRTG", "SSMS",
     "TKIM", "TOTL", "TSPC", "WIKA", "WSBP", "WTON",
 
-    # ── Mega-winner targets (identified from Step 2 analysis) ──
-    "BREN", "CUAN", "DEWA", "ENRG", "KRAS", "SMDR", "WIFI", "WIIM",
+    # ── Expansion Batch 1 (Apr 2026 — high-liquidity new additions) ──
+    "AADI", "ADMR", "BREN", "BRIS", "CUAN", "DEWA", "PANI", "PSAB",
+    "RAJA", "RATU", "WIFI",
+
+    # ── Expansion Batch 2 (Apr 2026 — additional screening universe) ──
+    "ADHI", "AGRO", "AMAN", "ARGO", "ARTO", "ASSA", "AVIA", "BNBA",
+    "DOID", "ENRG", "IMAS", "KRAS", "POWR", "SMBR", "SMDR", "WIIM",
+
+    # ── Expansion Batch 3 (Apr 2026) ──
+    "INET",
 ]
 
 
