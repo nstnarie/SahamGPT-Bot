@@ -59,14 +59,14 @@ class MarketRegimeConfig:
 @dataclass
 class BreakoutConfig:
     """
-    Primary entry: breakout above HISTORICAL resistance, not just 20-day high.
-    
-    NEW in v5: Uses 60-day high as resistance level instead of 20-day.
-    This means we only enter when the stock breaks a more significant 
-    price level — a real resistance break, not just a minor swing high.
+    Primary entry: breakout above recent high.
+
+    v10 mega-winner rebuild: Uses 20-day high (was 60).
+    Step 2 analysis showed N=20 catches 100% of mega-winners at median 13d
+    after trough (18.9% missed), vs N=60 catching 96.4% at 34d (30.2% missed).
     """
-    # Break above N-day highest high (historical resistance)
-    breakout_period: int = 60  # 60-day high = ~3 months of resistance (was 20)
+    # Break above N-day highest high
+    breakout_period: int = 20  # 20-day high (was 60 in v5)
 
     # Volume spike on breakout day
     volume_spike_min: float = 1.5
