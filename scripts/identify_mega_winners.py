@@ -223,6 +223,17 @@ def analyze_ticker(ticker: str, full_df: pd.DataFrame) -> list:
         year_end = year_df.iloc[-1]["close"]
         year_return = round((year_end - year_start) / year_start * 100, 2) if year_start > 0 else 0.0
 
+        # Liquidity: avg daily transaction value in IDR billions (close × volume / 1e9)
+        avg_daily_value_bn = round(
+            (year_df["close"] * year_df["volume"]).mean() / 1e9, 3
+        ) if "volume" in year_df.columns else 0.0
+        if avg_daily_value_bn >= 5.0:
+            liquidity_tier = "High (>5B)"
+        elif avg_daily_value_bn >= 1.0:
+            liquidity_tier = "Medium (1-5B)"
+        else:
+            liquidity_tier = "Low (<1B)"
+
         results.append({
             "ticker": ticker,
             "sector": sector,
@@ -236,6 +247,8 @@ def analyze_ticker(ticker: str, full_df: pd.DataFrame) -> list:
             "year_start_price": round(year_start, 2),
             "year_end_price": round(year_end, 2),
             "year_return_pct": year_return,
+            "avg_daily_value_bn": avg_daily_value_bn,
+            "liquidity_tier": liquidity_tier,
         })
 
     return results
@@ -289,29 +302,34 @@ def main():
     mega_2025 = (df_all[(df_all["year"] == 2025) & (df_all["max_drawup_pct"] > 50)]
                  .sort_values("max_drawup_pct", ascending=False)
                  .reset_index(drop=True))
+    liquid_mega_2024 = mega_2024[mega_2024["avg_daily_value_bn"] >= 1.0].reset_index(drop=True)
+    liquid_mega_2025 = mega_2025[mega_2025["avg_daily_value_bn"] >= 1.0].reset_index(drop=True)
     summary = df_all.sort_values(["ticker", "year"]).reset_index(drop=True)
 
     # Write Excel
     with pd.ExcelWriter("mega_winners_analysis.xlsx", engine="openpyxl") as w:
         mega_2024.to_excel(w, sheet_name="Mega Winners 2024", index=False)
         mega_2025.to_excel(w, sheet_name="Mega Winners 2025", index=False)
+        liquid_mega_2024.to_excel(w, sheet_name="Liquid Mega Winners 2024", index=False)
+        liquid_mega_2025.to_excel(w, sheet_name="Liquid Mega Winners 2025", index=False)
         summary.to_excel(w, sheet_name="All Stocks Summary", index=False)
 
     logger.info("=" * 60)
     logger.info(f"Excel written: mega_winners_analysis.xlsx")
     logger.info(f"Tickers processed: {len(LQ45_TICKERS) - len(skipped)}/{len(LQ45_TICKERS)}")
     logger.info(f"Tickers skipped (no data): {len(skipped)} — {skipped}")
-    logger.info(f"Mega winners 2024 (>50% drawup): {len(mega_2024)}")
-    logger.info(f"Mega winners 2025 (>50% drawup): {len(mega_2025)}")
+    logger.info(f"Mega winners 2024 (>50% drawup): {len(mega_2024)} total, {len(liquid_mega_2024)} liquid (>=1B/day)")
+    logger.info(f"Mega winners 2025 (>50% drawup): {len(mega_2025)} total, {len(liquid_mega_2025)} liquid (>=1B/day)")
 
-    # Print top mega winners
-    for year, df_mega in [("2024", mega_2024), ("2025", mega_2025)]:
-        if not df_mega.empty:
-            logger.info(f"\n── Top Mega Winners {year} ──")
-            for _, row in df_mega.head(10).iterrows():
+    # Print top liquid mega winners
+    for year, df_liq in [("2024", liquid_mega_2024), ("2025", liquid_mega_2025)]:
+        if not df_liq.empty:
+            logger.info(f"\n── Top Liquid Mega Winners {year} (avg daily value >= Rp 1B) ──")
+            for _, row in df_liq.head(10).iterrows():
                 logger.info(
                     f"  {row['ticker']:6s} ({row['sector']:20s}) "
                     f"drawup={row['max_drawup_pct']:+6.1f}%  "
+                    f"adv={row['avg_daily_value_bn']:.1f}B  [{row['liquidity_tier']}]  "
                     f"trough={row['trough_date']} @ {row['trough_price']:.0f} → "
                     f"peak={row['peak_date']} @ {row['peak_price']:.0f}  "
                     f"({row['move_duration_days']}d)"
