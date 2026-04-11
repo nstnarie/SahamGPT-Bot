@@ -51,8 +51,8 @@ jobs:
           name: idx-database
           path: .
           if_no_artifact_found: warn
-          workflow_conclusion: ""
-          search_artifacts: true
+          workflow: initial_scrape.yml
+          workflow_conclusion: success
         continue-on-error: true
 
       - name: Check if database exists
@@ -369,15 +369,6 @@ jobs:
 
           print(f"Excel created: {len(df)} trades")
           PYEOF
-
-      - name: Save database
-        uses: actions/upload-artifact@v4
-        if: always() && github.ref == 'refs/heads/main'
-        with:
-          name: idx-database
-          path: idx_swing_trader.db
-          retention-days: 90
-          overwrite: true
 
       - name: Save backtest results
         uses: actions/upload-artifact@v4
