@@ -105,39 +105,18 @@ class SignalCombiner:
         # Minimum price filter
         min_price = self.config.universe.min_stock_price
 
-        # ── NEW: Selling pressure detection (long upper shadow) ──
-        # A candle with a long upper shadow means: price went up during the day
-        # but sellers pushed it back down before close. This is bearish even if
-        # the close is higher than open.
-        #
-        # Upper shadow ratio = (high - close) / (high - low)
-        # If upper shadow > 50% of the candle range → heavy selling pressure
-        # Example: MYOR Apr 25 2025 — closed up but got hammered down from high
-        candle_range = df["high"] - df["low"]
-        upper_shadow = df["high"] - df["close"]
-        df["upper_shadow_ratio"] = upper_shadow / candle_range.replace(0, np.nan)
-        df["upper_shadow_ratio"] = df["upper_shadow_ratio"].fillna(0)
-
-        # Also check: close should be in the upper half of the candle
-        # Close position: 1.0 = closed at high, 0.0 = closed at low
-        df["close_position"] = (df["close"] - df["low"]) / candle_range.replace(0, np.nan)
-        df["close_position"] = df["close_position"].fillna(0.5)
-
-        # Selling pressure = long upper shadow (>40%) OR close in lower third
-        df["has_selling_pressure"] = (
-            (df["upper_shadow_ratio"] > 0.40) |  # long upper shadow
-            (df["close_position"] < 0.33)         # close near the low
-        )
-
         # Breakout conditions
-        # v10: removed close > ma_50 — Step 2 analysis showed 68% of mega-winners
-        # have bearish MA alignment at trough; requiring MA50 blocks 54% of them.
+        # v10: removed close > ma_50 — Step 2 analysis: 68% of mega-winners have
+        # bearish MA alignment at trough; requiring MA50 blocks 54% of them.
+        # v10: removed selling pressure filter — blocked CUAN (+511%) and SMDR
+        # (+117%) on their breakout day. Stop loss handles bad candle entries
+        # at lower cost than missing mega-winners.
+        df["has_selling_pressure"] = False  # kept for signal output compatibility
         df["is_breakout"] = (
-            (df["close"] > df["high_Nd"]) &              # breaks historical resistance
+            (df["close"] > df["high_Nd"]) &              # breaks resistance
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
             (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
             (df["close"] >= min_price) &                  # minimum price filter
-            (~df["has_selling_pressure"]) &               # NO selling pressure
             (df["high_Nd"].notna())                       # enough data
         )
 
