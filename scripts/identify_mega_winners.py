@@ -131,9 +131,12 @@ def download_ticker_data(ticker: str, start: str, end: str) -> pd.DataFrame:
             t = yf.Ticker(f"{ticker}.JK")
             df = t.history(start=start, end=end, auto_adjust=False)
             if df is not None and not df.empty:
-                df.columns = [c.lower().replace(" ", "_") for c in df.columns]
                 df = df.reset_index()
+                df.columns = [c.lower().replace(" ", "_") for c in df.columns]
                 if "date" in df.columns:
+                    df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
+                elif "datetime" in df.columns:
+                    df = df.rename(columns={"datetime": "date"})
                     df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
                 return df
             return pd.DataFrame()
