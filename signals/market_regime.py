@@ -67,11 +67,15 @@ class MarketRegimeFilter:
         # Map exposure multiplier
         df["exposure_mult"] = df["regime"].map(self.cfg.exposure_multiplier)
 
-        # Exp 2: IHSG entry filter — skip entries when IHSG is below MA20 or crashed >1% today
-        df["ma_20"] = df["close"].rolling(20, min_periods=10).mean()
-        df["ihsg_above_ma20"] = df["close"] > df["ma_20"]
+        # v10: IHSG entry filter uses MA50 instead of MA20.
+        # MA20 was too sensitive — blocked entire months (Feb 2025: 0% ok)
+        # where mega-winners were breaking out from their troughs.
+        # MA50 still prevents entries in true bear markets but allows
+        # early recovery entries when mega-winners begin their moves.
+        df["ma_50_ihsg"] = df["close"].rolling(50, min_periods=20).mean()
+        df["ihsg_above_ma50"] = df["close"] > df["ma_50_ihsg"]
         df["ihsg_daily_return"] = df["close"].pct_change()
-        df["ihsg_entry_ok"] = df["ihsg_above_ma20"] & (df["ihsg_daily_return"] > -0.01)
+        df["ihsg_entry_ok"] = df["ihsg_above_ma50"] & (df["ihsg_daily_return"] > -0.01)
 
         logger.info(
             f"Regime computed: "

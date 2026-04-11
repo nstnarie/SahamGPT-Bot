@@ -110,7 +110,7 @@ class EntryConfig:
     signal_confirmation_days: int = 1
     max_gap_down_pct: float = 0.02
     max_gap_up_pct: float = 0.07   # skip entry if stock gaps up >7% from signal close
-    max_entries_per_week: int = 5  # rolling 10-day entry limit — prevents cluster overtrading
+    max_entries_per_week: int = 10  # rolling 10-day entry limit (was 5; raised for v10 mega-winner capture)
     min_big_money_score: float = 0.0
 
 
