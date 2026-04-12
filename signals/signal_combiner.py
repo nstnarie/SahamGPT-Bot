@@ -112,13 +112,28 @@ class SignalCombiner:
         # (+117%) on their breakout day. Stop loss handles bad candle entries
         # at lower cost than missing mega-winners.
         df["has_selling_pressure"] = False  # kept for signal output compatibility
-        df["is_breakout"] = (
+        is_breakout = (
             (df["close"] > df["high_Nd"]) &              # breaks resistance
             (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
             (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
             (df["close"] >= min_price) &                  # minimum price filter
             (df["high_Nd"].notna())                       # enough data
         )
+
+        # Phase B entry quality filters (Step 6)
+        ef = self.config.entry_filter
+
+        # 52-week high filter: block deep-discount breakouts (structural decliners)
+        if ef.use_52w_filter and "dist_from_52w_high" in df.columns:
+            is_breakout = is_breakout & (df["dist_from_52w_high"] >= ef.max_dist_from_52w_high)
+
+        # Breakout strength filter: require close actually above prior 20d high
+        if ef.use_breakout_strength_filter:
+            breakout_strength = (df["close"] / df["high_Nd"] - 1) * 100
+            df["breakout_strength"] = breakout_strength
+            is_breakout = is_breakout & (breakout_strength >= ef.min_breakout_strength)
+
+        df["is_breakout"] = is_breakout
 
         return df
 

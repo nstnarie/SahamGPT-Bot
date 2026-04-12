@@ -50,6 +50,10 @@ class TechnicalAnalyzer:
         out["vol_avg_20"] = out["volume"].rolling(20, min_periods=5).mean()
         out["vol_ratio"] = out["volume"] / out["vol_avg_20"].replace(0, np.nan)
 
+        # 52-week (252 trading days) high for entry quality filter
+        out["high_252d"] = out["high"].rolling(window=252, min_periods=60).max()
+        out["dist_from_52w_high"] = (out["close"] / out["high_252d"] - 1) * 100
+
         return out
 
     def check_entry_conditions(self, row: pd.Series) -> bool:

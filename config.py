@@ -107,6 +107,18 @@ class EntryConfig:
 
 
 @dataclass
+class EntryFilterConfig:
+    """Phase B entry quality filters — reduce false breakout entries."""
+    # Block entries on stocks >40% below 52-week high (structural decline)
+    max_dist_from_52w_high: float = -40.0
+    # Require breakout_strength >= 0 (close actually above prior 20d high)
+    min_breakout_strength: float = 0.0
+    # Enable/disable each filter independently (set False to roll back)
+    use_52w_filter: bool = True
+    use_breakout_strength_filter: bool = True
+
+
+@dataclass
 class PositionSizingConfig:
     risk_per_trade: float = 0.015
     atr_period: int = 14
@@ -211,6 +223,7 @@ class FrameworkConfig:
     foreign_flow: ForeignFlowConfig = field(default_factory=ForeignFlowConfig)
     technical: TechnicalConfig = field(default_factory=TechnicalConfig)
     entry: EntryConfig = field(default_factory=EntryConfig)
+    entry_filter: EntryFilterConfig = field(default_factory=EntryFilterConfig)
     sizing: PositionSizingConfig = field(default_factory=PositionSizingConfig)
     exit: ExitConfig = field(default_factory=ExitConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
