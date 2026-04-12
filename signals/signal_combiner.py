@@ -127,10 +127,10 @@ class SignalCombiner:
         if ef.use_52w_filter and "dist_from_52w_high" in df.columns:
             is_breakout = is_breakout & (df["dist_from_52w_high"] >= ef.max_dist_from_52w_high)
 
-        # Breakout strength filter: require close actually above prior 20d high
+        # Breakout strength: always compute for signal output and future ranking
+        breakout_strength = (df["close"] / df["high_Nd"] - 1) * 100
+        df["breakout_strength"] = breakout_strength
         if ef.use_breakout_strength_filter:
-            breakout_strength = (df["close"] / df["high_Nd"] - 1) * 100
-            df["breakout_strength"] = breakout_strength
             is_breakout = is_breakout & (breakout_strength >= ef.min_breakout_strength)
 
         df["is_breakout"] = is_breakout

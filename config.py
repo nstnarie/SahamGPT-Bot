@@ -115,7 +115,7 @@ class EntryFilterConfig:
     min_breakout_strength: float = 0.0
     # Enable/disable each filter independently (set False to roll back)
     use_52w_filter: bool = True
-    use_breakout_strength_filter: bool = True
+    use_breakout_strength_filter: bool = False
 
 
 @dataclass
