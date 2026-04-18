@@ -153,18 +153,31 @@ class EntryFilterConfig:
 @dataclass
 class SignalRankingConfig:
     """
-    Step 7: Composite signal quality score for ranking pending entries.
+    Step 11: Recalibrated composite signal quality score for ranking pending entries.
 
-    Replaces vol_ratio (d=0.071, useless) with a weighted combination of
-    indicators confirmed via Cohen's d analysis on 803 trades (2021-2025).
-    Higher score = higher priority entry when capital is limited.
+    Weights updated from Step 11 signal quality analysis (62/71 trades, 2024-2025).
+    Cross-year Cohen's d (winners vs losers) used to derive weights.
+    Higher score = higher priority entry when capital is limited (MPW=6 throttle).
+
+    Step 7 weights (old, heuristic):
+      price_vs_ma200 0.30 (d=+0.402), breakout_strength 0.20 (d=+0.266),
+      atr_pct 0.20 (d=+0.360), prior_return_5d 0.15 (d=+0.358), rsi 0.15 (d=+0.328)
+
+    Step 11 weights (new, data-driven from 2024+2025 cross-year analysis):
+      breakout_strength 0.35 — strongest cross-year predictor (d=0.87/0.75)
+      price_vs_ma200 0.25 — strong for mega-winners (d=0.91/0.67 for BW vs rest)
+      dist_from_52w_high 0.15 — consistent positive d both years, not in old score
+      prior_return_5d 0.10 — 2024-only signal (d=0.79/−0.07), downweighted
+      rsi 0.10 — 2024-only signal (d=1.03/+0.02), downweighted
+      atr_pct 0.05 — very weak cross-year predictor (d=0.18/−0.02)
     """
     # Feature weights (must sum to 1.0)
-    weight_price_vs_ma200: float = 0.30   # d=+0.402 — strongest
-    weight_breakout_strength: float = 0.20  # d=+0.266
-    weight_atr_pct: float = 0.20           # d=+0.360
-    weight_prior_return_5d: float = 0.15   # d=+0.358
-    weight_rsi: float = 0.15              # d=+0.328
+    weight_breakout_strength: float = 0.35   # d=+0.865/+0.746 — strongest cross-year
+    weight_price_vs_ma200: float = 0.25      # d=+0.677/+0.311 — strong for mega-winners
+    weight_dist_from_52w_high: float = 0.15  # d=+0.498/+0.164 — consistent, was missing
+    weight_prior_return_5d: float = 0.10     # d=+0.794/−0.066 — 2024-only, downweighted
+    weight_rsi: float = 0.10                 # d=+1.029/+0.018 — 2024-only, downweighted
+    weight_atr_pct: float = 0.05             # d=+0.177/−0.018 — very weak, downweighted
 
     # Rolling window for within-ticker percentile normalization
     percentile_window: int = 60

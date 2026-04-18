@@ -305,28 +305,30 @@ class SignalCombiner:
 
     def _compute_signal_quality(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Step 7: Composite signal quality score for ranking pending entries.
+        Step 11: Recalibrated composite signal quality score for ranking pending entries.
 
         Each feature is normalized to a within-ticker rolling percentile rank
         (0-1) over the past N days, then combined with fixed weights.
         Score of 0.5 = average. Higher = better quality breakout signal.
 
-        Features and weights (from Cohen's d analysis, 803 trades 2021-2025):
-          price_vs_ma200   0.30  (d=+0.402)
-          breakout_strength 0.20 (d=+0.266)
-          atr_pct          0.20  (d=+0.360)
-          prior_return_5d  0.15  (d=+0.358)
-          rsi              0.15  (d=+0.328)
+        Weights recalibrated from Step 11 cross-year Cohen's d analysis (2024+2025):
+          breakout_strength  0.35  (d=+0.865/+0.746 cross-year — strongest)
+          price_vs_ma200     0.25  (d=+0.677/+0.311)
+          dist_from_52w_high 0.15  (d=+0.498/+0.164 — was missing from old score)
+          prior_return_5d    0.10  (d=+0.794/−0.067 — 2024-only, downweighted)
+          rsi                0.10  (d=+1.029/+0.018 — 2024-only, downweighted)
+          atr_pct            0.05  (d=+0.177/−0.018 — very weak, downweighted)
         """
         rcfg = self.config.ranking
         w = rcfg.percentile_window
 
         feature_weights = [
-            ("price_vs_ma200",    rcfg.weight_price_vs_ma200),
-            ("breakout_strength", rcfg.weight_breakout_strength),
-            ("atr_pct",           rcfg.weight_atr_pct),
-            ("prior_return_5d",   rcfg.weight_prior_return_5d),
-            ("rsi",               rcfg.weight_rsi),
+            ("breakout_strength",  rcfg.weight_breakout_strength),
+            ("price_vs_ma200",     rcfg.weight_price_vs_ma200),
+            ("dist_from_52w_high", rcfg.weight_dist_from_52w_high),
+            ("prior_return_5d",    rcfg.weight_prior_return_5d),
+            ("rsi",                rcfg.weight_rsi),
+            ("atr_pct",            rcfg.weight_atr_pct),
         ]
 
         score = pd.Series(0.0, index=df.index)
