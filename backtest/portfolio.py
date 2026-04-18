@@ -35,6 +35,8 @@ class Position:
     days_held: int = 0
     # NEW: track if this position is in "trend mode" (high performer)
     in_trend_mode: bool = False
+    # Entry-time signal features for post-trade analysis
+    entry_signal_features: dict = field(default_factory=dict)
 
 
 @dataclass

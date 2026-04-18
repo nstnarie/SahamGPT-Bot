@@ -38,6 +38,22 @@ class Trade:
     exit_reason: str = ""
     entry_signal_score: float = 0.0
     sector: str = ""
+    # Entry-time signal features (for post-trade analysis)
+    composite_score: float = float("nan")
+    breakout_strength: float = float("nan")
+    vol_ratio: float = float("nan")
+    rsi: float = float("nan")
+    atr_pct: float = float("nan")
+    price_vs_ma200: float = float("nan")
+    prior_return_5d: float = float("nan")
+    accumulation_score: float = float("nan")
+    top_broker_acc: float = float("nan")
+    net_foreign: float = float("nan")
+    ff_confirmed: float = float("nan")
+    entry_regime: str = ""
+    ksei_net_5d: float = float("nan")
+    dist_from_52w_high: float = float("nan")
+    entry_exposure_mult: float = float("nan")
 
 
 class BacktestEngine:
@@ -163,6 +179,19 @@ class BacktestEngine:
 
                         sector = stock_sectors.get(ticker, "")
 
+                        # Capture entry-time signal features for post-trade analysis
+                        _SIGNAL_FEATURES = [
+                            "composite_score", "breakout_strength", "vol_ratio", "rsi",
+                            "atr_pct", "price_vs_ma200", "prior_return_5d",
+                            "accumulation_score", "top_broker_acc", "net_foreign",
+                            "ff_confirmed", "ksei_net_5d", "dist_from_52w_high", "fp_ratio",
+                        ]
+                        entry_signal_features = {"entry_regime": regime, "entry_exposure_mult": exposure_mult}
+                        if sig_df is not None and current_date in sig_df.index:
+                            sig_row = sig_df.loc[current_date]
+                            for _f in _SIGNAL_FEATURES:
+                                entry_signal_features[_f] = sig_row.get(_f, float("nan"))
+
                         shares = self.portfolio_mgr.calculate_position_size(
                             portfolio, open_price, atr, sector, exposure_mult,
                         )
@@ -184,6 +213,7 @@ class BacktestEngine:
                                     highest_close=buy["exec_price"],
                                     sector=sector,
                                     entry_atr=atr,
+                                    entry_signal_features=entry_signal_features,
                                 )
                                 portfolio.positions[ticker] = pos
                                 portfolio.cash -= buy["total_cost"]
@@ -254,6 +284,7 @@ class BacktestEngine:
                     entry_cost_fraction = pos.total_cost * (shares_to_sell / pos.shares)
                     pnl = sell["net_proceeds"] - entry_cost_fraction
 
+                    _feats = pos.entry_signal_features
                     trade = Trade(
                         ticker=ticker,
                         entry_date=pos.entry_date,
@@ -268,6 +299,22 @@ class BacktestEngine:
                         holding_days=pos.days_held,
                         exit_reason=exit_reason,
                         sector=pos.sector,
+                        entry_signal_score=_feats.get("composite_score", 0.0),
+                        composite_score=_feats.get("composite_score", float("nan")),
+                        breakout_strength=_feats.get("breakout_strength", float("nan")),
+                        vol_ratio=_feats.get("vol_ratio", float("nan")),
+                        rsi=_feats.get("rsi", float("nan")),
+                        atr_pct=_feats.get("atr_pct", float("nan")),
+                        price_vs_ma200=_feats.get("price_vs_ma200", float("nan")),
+                        prior_return_5d=_feats.get("prior_return_5d", float("nan")),
+                        accumulation_score=_feats.get("accumulation_score", float("nan")),
+                        top_broker_acc=_feats.get("top_broker_acc", float("nan")),
+                        net_foreign=_feats.get("net_foreign", float("nan")),
+                        ff_confirmed=_feats.get("ff_confirmed", float("nan")),
+                        entry_regime=_feats.get("entry_regime", ""),
+                        ksei_net_5d=_feats.get("ksei_net_5d", float("nan")),
+                        dist_from_52w_high=_feats.get("dist_from_52w_high", float("nan")),
+                        entry_exposure_mult=_feats.get("entry_exposure_mult", float("nan")),
                     )
                     completed_trades.append(trade)
 
@@ -331,6 +378,22 @@ class BacktestEngine:
             "exit_proceeds": t.exit_proceeds, "pnl": t.pnl, "pnl_pct": t.pnl_pct,
             "holding_days": t.holding_days, "exit_reason": t.exit_reason,
             "sector": t.sector,
+            # Entry-time signal features
+            "composite_score": t.composite_score,
+            "breakout_strength": t.breakout_strength,
+            "vol_ratio": t.vol_ratio,
+            "rsi": t.rsi,
+            "atr_pct": t.atr_pct,
+            "price_vs_ma200": t.price_vs_ma200,
+            "prior_return_5d": t.prior_return_5d,
+            "accumulation_score": t.accumulation_score,
+            "top_broker_acc": t.top_broker_acc,
+            "net_foreign": t.net_foreign,
+            "ff_confirmed": t.ff_confirmed,
+            "entry_regime": t.entry_regime,
+            "ksei_net_5d": t.ksei_net_5d,
+            "dist_from_52w_high": t.dist_from_52w_high,
+            "entry_exposure_mult": t.entry_exposure_mult,
         } for t in completed_trades])
 
         benchmark = None
