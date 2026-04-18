@@ -124,11 +124,15 @@ class EntryFilterConfig:
     """Phase B entry quality filters — reduce false breakout entries."""
     # Block entries on stocks >40% below 52-week high (structural decline)
     max_dist_from_52w_high: float = -40.0
-    # Require breakout_strength >= 0 (close actually above prior 20d high)
-    min_breakout_strength: float = 0.0
+    # Extreme pullback filter: block entry if breakout_strength < -8% on entry day (T+1).
+    # Analysis (Step 11): safe threshold — blocks 4 trades/year, 0 big winners lost cross-year.
+    # PF improvement: 1.34→1.46 (2024), 1.53→1.82 (2025).
+    # Applied at ENGINE entry time (T+1 open), not signal day (T), because on signal day
+    # breakout_strength is always > 0 by definition of the breakout condition.
+    min_breakout_strength: float = -8.0
     # Enable/disable each filter independently (set False to roll back)
     use_52w_filter: bool = True
-    use_breakout_strength_filter: bool = False
+    use_breakout_strength_filter: bool = True
 
     # Step 7: new hard filters (confirmed 0 big winners blocked)
     # Block if stock is >10% below 200MA (structural downtrend, d=+0.402)
