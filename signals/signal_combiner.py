@@ -29,7 +29,7 @@ class SignalCombiner:
         self.technical = TechnicalAnalyzer(config.technical)
 
     def generate_signals(self, ticker, price_df, ihsg_df, universe_prices,
-                         foreign_flow_df=None, broker_df=None):
+                         foreign_flow_df=None, broker_df=None, fp_ratio=None):
         if price_df.empty:
             return pd.DataFrame()
 
@@ -38,7 +38,7 @@ class SignalCombiner:
         result = tech_df.copy()
 
         # Add breakout detection (60-day high = historical resistance)
-        result = self._add_breakout_signals(result)
+        result = self._add_breakout_signals(result, fp_ratio=fp_ratio)
 
         # Add foreign flow confirmation
         result = self._add_foreign_flow_signals(result, foreign_flow_df)
@@ -78,7 +78,7 @@ class SignalCombiner:
 
         return result
 
-    def _add_breakout_signals(self, df):
+    def _add_breakout_signals(self, df, fp_ratio=None):
         """
         Breakout = close exceeds N-day highest high (historical resistance).
         
@@ -145,7 +145,14 @@ class SignalCombiner:
         if ef.use_atr_filter and "atr_pct" in df.columns:
             is_breakout = is_breakout & (df["atr_pct"] >= ef.min_atr_pct)
 
+        # EXP: fp_ratio filter — block high-fp stocks at entry
+        # High foreign participation = liquid hedge vehicle, not fundamental buying
+        ef = self.config.entry_filter
+        if ef.use_fp_filter and fp_ratio is not None and fp_ratio >= ef.max_fp_ratio:
+            is_breakout = pd.Series(False, index=df.index)
+
         df["is_breakout"] = is_breakout
+        df["fp_ratio"] = fp_ratio if fp_ratio is not None else np.nan
 
         return df
 
@@ -333,9 +340,11 @@ class SignalCombiner:
         return df
 
     def generate_signals_universe(self, universe_prices, ihsg_df,
-                                   foreign_flows=None, broker_data=None):
+                                   foreign_flows=None, broker_data=None,
+                                   fp_ratios=None):
         foreign_flows = foreign_flows or {}
         broker_data = broker_data or {}
+        fp_ratios = fp_ratios or {}
         all_signals = {}
 
         for ticker, price_df in universe_prices.items():
@@ -343,6 +352,7 @@ class SignalCombiner:
                 sig_df = self.generate_signals(
                     ticker, price_df, ihsg_df, universe_prices,
                     foreign_flows.get(ticker), broker_data.get(ticker),
+                    fp_ratio=fp_ratios.get(ticker),
                 )
                 all_signals[ticker] = sig_df
             except Exception as e:

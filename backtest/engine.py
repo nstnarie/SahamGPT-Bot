@@ -48,11 +48,12 @@ class BacktestEngine:
         self.portfolio_mgr = PortfolioManager(config.sizing, config.exit)
 
     def run(self, universe_prices, ihsg_df, foreign_flows=None,
-            broker_data=None, stock_sectors=None):
+            broker_data=None, stock_sectors=None, fp_ratios=None):
 
         foreign_flows = foreign_flows or {}
         broker_data = broker_data or {}
         stock_sectors = stock_sectors or {}
+        fp_ratios = fp_ratios or {}
 
         initial_capital = self.config.backtest.initial_capital
         start_date = pd.Timestamp(self.config.backtest.start_date)
@@ -61,7 +62,7 @@ class BacktestEngine:
         # Pre-compute signals for all stocks
         logger.info("Pre-computing signals for all stocks...")
         all_signals = self.signal_combiner.generate_signals_universe(
-            universe_prices, ihsg_df, foreign_flows, broker_data,
+            universe_prices, ihsg_df, foreign_flows, broker_data, fp_ratios=fp_ratios,
         )
 
         # Build trading calendar

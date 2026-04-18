@@ -25,7 +25,7 @@ from database.schema import create_all_tables, get_session, get_engine, Stock
 from database.data_loader import (
     load_prices_as_dataframe, load_index_df,
     load_foreign_flow_df, load_broker_summary_as_ff_df,
-    load_broker_accumulation_df,
+    load_broker_accumulation_df, load_fp_ratios,
     data_quality_check,
 )
 from scraper.price_scraper import PriceScraper, LQ45_TICKERS
@@ -132,6 +132,15 @@ def main():
     broker_accumulations: Dict[str, pd.DataFrame] = {}
     stock_sectors: Dict[str, str] = {}
 
+    # Load fp_ratios from full available broker_summary range
+    fp_ratios = load_fp_ratios(session)
+    if fp_ratios:
+        fp_enabled = config.entry_filter.use_fp_filter
+        logger.info(f"Loaded fp_ratios for {len(fp_ratios)} tickers (filter {'ON' if fp_enabled else 'OFF'}, threshold < {config.entry_filter.max_fp_ratio})")
+    else:
+        fp_ratios = {}
+        logger.info("No broker_summary data for fp_ratio — fp_filter disabled")
+
     for ticker in good_tickers:
         pdf = load_prices_as_dataframe(session, ticker, warmup_start, end_dt)
         if not pdf.empty:
@@ -165,6 +174,7 @@ def main():
         foreign_flows=foreign_flows,
         broker_data=broker_accumulations,
         stock_sectors=stock_sectors,
+        fp_ratios=fp_ratios,
     )
 
     # Reports
