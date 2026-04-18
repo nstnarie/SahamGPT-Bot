@@ -56,8 +56,7 @@ def parse_args():
     parser.add_argument("--scrape", action="store_true",
                         help="Force re-scrape all data")
     parser.add_argument("--tickers", nargs="+", default=None)
-    parser.add_argument("--real-broker", action="store_true",
-                        help="Use real Asing broker data instead of synthetic foreign flow")
+    # --real-broker removed: real Asing broker data is now always used
     parser.add_argument("--output", default="reports")
     parser.add_argument("--log-level", default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -95,19 +94,13 @@ def main():
             needs_scrape = True
 
     if needs_scrape:
-        logger.info("Scraping historical data...")
+        logger.info("Scraping historical price data...")
         price_scraper = PriceScraper(config)
         price_scraper.scrape_and_store(session, tickers, start_date=args.start)
 
-        flow_scraper = FlowScraper(config)
-        for ticker in tickers:
-            price_df = load_prices_as_dataframe(session, ticker)
-            if not price_df.empty:
-                flow_scraper.estimate_and_store(session, price_df, ticker)
-
         fund_scraper = FundamentalScraper(config)
         fund_scraper.update_stock_master(session, tickers)
-        logger.info("Scraping complete.")
+        logger.info("Scraping complete. Note: broker summary (real Asing FF) must be scraped separately via scrape_broker_summary workflow.")
 
     # Quality check
     good_tickers = []
@@ -121,7 +114,7 @@ def main():
         sys.exit(1)
 
     logger.info(f"{len(good_tickers)} tickers with data")
-    logger.info(f"Foreign flow source: {'real broker data (Asing)' if args.real_broker else 'synthetic estimate'}")
+    logger.info("Foreign flow source: real Asing net flow (aggregated from broker_summary into foreign_flow table)")
 
     # Load data
     start_dt = pd.Timestamp(args.start).date()
@@ -143,17 +136,14 @@ def main():
         pdf = load_prices_as_dataframe(session, ticker, warmup_start, end_dt)
         if not pdf.empty:
             universe_prices[ticker] = pdf
-        if args.real_broker:
-            ff = load_broker_summary_as_ff_df(session, ticker, start_dt, end_dt)
-            # No fallback to synthetic — tickers without real broker data
-            # trade on price/volume signals only (FF filter skipped when ff is empty)
-            acc = load_broker_accumulation_df(session, ticker, start_dt, end_dt)
-            if not acc.empty:
-                broker_accumulations[ticker] = acc
-        else:
-            ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
+        # foreign_flow table now contains real aggregated Asing net flow
+        # (pre-aggregated from broker_summary, replacing synthetic estimates)
+        ff = load_foreign_flow_df(session, ticker, start_dt, end_dt)
         if not ff.empty:
             foreign_flows[ticker] = ff
+        acc = load_broker_accumulation_df(session, ticker, start_dt, end_dt)
+        if not acc.empty:
+            broker_accumulations[ticker] = acc
         stock = session.query(Stock).filter_by(ticker=ticker).first()
         if stock and stock.sector:
             stock_sectors[ticker] = stock.sector

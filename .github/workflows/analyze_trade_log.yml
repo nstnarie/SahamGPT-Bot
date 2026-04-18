@@ -15,10 +15,7 @@ on:
         description: "Starting capital (IDR)"
         required: true
         default: "1000000000"
-      real_broker:
-        description: "Use real Asing broker data (true/false)"
-        required: false
-        default: "false"
+      # real_broker removed — real Asing broker data is always used
       min_pnl_pct_winner:
         description: "Min pnl_pct to count as big winner (%)"
         required: false
@@ -72,10 +69,10 @@ jobs:
         if: steps.check_db.outputs.exists == 'true'
         run: |
           git fetch origin main
-          git checkout origin/main -- idx_broker_part_a.db idx_broker_part_b.db
+          git checkout origin/main -- idx_broker_part_a.db
         continue-on-error: true
 
-      - name: Merge broker data from split files if needed
+      - name: Restore foreign_flow from split file
         if: steps.check_db.outputs.exists == 'true'
         run: |
           python3 << 'EOF'
@@ -83,43 +80,62 @@ jobs:
 
           DB = "idx_swing_trader.db"
           PART_A = "idx_broker_part_a.db"
-          PART_B = "idx_broker_part_b.db"
 
-          if not os.path.exists(PART_A) or not os.path.exists(PART_B):
-              print("Split files not found — proceeding without broker data")
+          if not os.path.exists(PART_A):
+              print("Split file not found — proceeding without foreign flow data")
               exit(0)
 
-          split_a = sqlite3.connect(PART_A).execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
-          split_b = sqlite3.connect(PART_B).execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
-          split_total = split_a + split_b
-          print(f"Split files: {split_a:,} + {split_b:,} = {split_total:,} records")
+          conn_a = sqlite3.connect(PART_A)
+          tables = [r[0] for r in conn_a.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+          conn_a.close()
 
-          conn = sqlite3.connect(DB)
-          count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
-          conn.close()
-
-          if count >= split_total:
-              print(f"broker_summary has {count:,} records — skipping merge")
+          if "foreign_flow" not in tables:
+              print(f"idx_broker_part_a.db has no foreign_flow table (tables: {tables}) — skipping")
               exit(0)
 
-          conn = sqlite3.connect(DB)
-          for part in [PART_A, PART_B]:
-              conn.execute(f"ATTACH DATABASE '{part}' AS part_db")
-              cur = conn.execute("""
-                  INSERT OR IGNORE INTO broker_summary
-                      (ticker, date, broker_code, broker_type,
-                       buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume)
-                  SELECT ticker, date, broker_code, broker_type,
-                         buy_value, sell_value, buy_volume, sell_volume, net_value, net_volume
-                  FROM part_db.broker_summary
-              """)
-              print(f"  Inserted from {part}: {cur.rowcount:,} records")
-              conn.commit()
-              conn.execute("DETACH DATABASE part_db")
+          split_count = sqlite3.connect(PART_A).execute("SELECT COUNT(*) FROM foreign_flow").fetchone()[0]
+          min_d, max_d = sqlite3.connect(PART_A).execute("SELECT MIN(date), MAX(date) FROM foreign_flow").fetchone()
+          print(f"Split file: {split_count:,} foreign_flow records | {min_d} → {max_d}")
 
-          total = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          conn = sqlite3.connect(DB)
+          conn.execute("""
+              CREATE TABLE IF NOT EXISTS foreign_flow (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ticker TEXT NOT NULL,
+                  date TEXT NOT NULL,
+                  net_foreign_value REAL,
+                  net_foreign_volume REAL,
+                  foreign_buy_value REAL,
+                  foreign_sell_value REAL,
+                  UNIQUE(ticker, date)
+              )
+          """)
+          conn.commit()
+
+          db_count = conn.execute("SELECT COUNT(*) FROM foreign_flow").fetchone()[0]
+          print(f"Main DB foreign_flow: {db_count:,} records")
+
+          if db_count >= split_count:
+              print("Main DB already has sufficient foreign_flow data — skipping restore")
+              conn.close()
+              exit(0)
+
+          print("Restoring foreign_flow from split file...")
+          conn.execute(f"ATTACH DATABASE '{PART_A}' AS ff_db")
+          cur = conn.execute("""
+              INSERT OR IGNORE INTO foreign_flow
+                  (ticker, date, net_foreign_value, net_foreign_volume,
+                   foreign_buy_value, foreign_sell_value)
+              SELECT ticker, date, net_foreign_value, net_foreign_volume,
+                     foreign_buy_value, foreign_sell_value
+              FROM ff_db.foreign_flow
+          """)
+          print(f"  Inserted: {cur.rowcount:,} records")
+          conn.commit()
+          conn.execute("DETACH DATABASE ff_db")
+          total = conn.execute("SELECT COUNT(*) FROM foreign_flow").fetchone()[0]
           conn.close()
-          print(f"Final broker_summary: {total:,} records")
+          print(f"Final foreign_flow: {total:,} records")
           EOF
 
       - name: Backfill missing price data
@@ -162,14 +178,16 @@ jobs:
           conn.commit()
 
           # Find tickers missing price data in the target window
-          if os.path.exists(DB) and conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0] > 0:
+          # Use foreign_flow as ticker universe (real Asing data, pre-aggregated)
+          ff_count = conn.execute("SELECT COUNT(*) FROM foreign_flow").fetchone()[0] if "foreign_flow" in [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()] else 0
+          if os.path.exists(DB) and ff_count > 0:
               missing = conn.execute(f"""
-                  SELECT DISTINCT b.ticker FROM broker_summary b
+                  SELECT DISTINCT f.ticker FROM foreign_flow f
                   LEFT JOIN (
                       SELECT DISTINCT ticker FROM daily_prices
                       WHERE date >= '{warmup_start}' AND date <= '{backtest_end}'
-                  ) d ON b.ticker = d.ticker
-                  WHERE d.ticker IS NULL ORDER BY b.ticker
+                  ) d ON f.ticker = d.ticker
+                  WHERE d.ticker IS NULL ORDER BY f.ticker
               """).fetchall()
               missing = [r[0] for r in missing]
           else:
@@ -279,7 +297,6 @@ jobs:
             --end ${{ github.event.inputs.end_date }} \
             --capital ${{ github.event.inputs.capital }} \
             --output reports \
-            ${{ github.event.inputs.real_broker == 'true' && '--real-broker' || '' }}
 
       - name: Analyze trade log
         run: |

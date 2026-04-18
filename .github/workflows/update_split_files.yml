@@ -20,70 +20,157 @@ jobs:
           path: .
           if_no_artifact_found: error
 
-      - name: Split database into part_a and part_b
+      - name: Verify source database
         run: |
           python3 << 'EOF'
-          import sqlite3, os, shutil
+          import sqlite3, os, sys
+
+          SOURCE = "idx_swing_trader.db"
+          if not os.path.exists(SOURCE):
+              print("FATAL: idx_swing_trader.db not found.")
+              sys.exit(1)
+
+          conn = sqlite3.connect(SOURCE)
+          bs_count = conn.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
+          min_d, max_d = conn.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
+          tickers = conn.execute("SELECT COUNT(DISTINCT ticker) FROM broker_summary").fetchone()[0]
+          conn.close()
+          print(f"broker_summary: {bs_count:,} records | {tickers} tickers | {min_d} → {max_d}")
+
+          if bs_count < 1_000_000:
+              print(f"FATAL: broker_summary has only {bs_count:,} records — refusing to overwrite split files with partial data")
+              sys.exit(1)
+          EOF
+
+      - name: Aggregate broker_summary into foreign_flow
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os
+
+          SOURCE = "idx_swing_trader.db"
+          conn = sqlite3.connect(SOURCE)
+
+          # Ensure foreign_flow table exists
+          conn.execute("""
+              CREATE TABLE IF NOT EXISTS foreign_flow (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ticker TEXT NOT NULL,
+                  date TEXT NOT NULL,
+                  net_foreign_value REAL,
+                  net_foreign_volume REAL,
+                  foreign_buy_value REAL,
+                  foreign_sell_value REAL,
+                  UNIQUE(ticker, date)
+              )
+          """)
+          conn.commit()
+
+          # Get date range of broker_summary to replace
+          min_d, max_d = conn.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
+          print(f"Aggregating broker_summary from {min_d} to {max_d}...")
+
+          # Delete existing foreign_flow in the broker_summary date range
+          deleted = conn.execute(f"""
+              DELETE FROM foreign_flow
+              WHERE date >= '{min_d}' AND date <= '{max_d}'
+          """).rowcount
+          conn.commit()
+          print(f"  Deleted {deleted:,} old foreign_flow rows in range")
+
+          # Re-aggregate: sum Asing broker rows per ticker/date
+          cur = conn.execute(f"""
+              INSERT OR IGNORE INTO foreign_flow
+                  (ticker, date, net_foreign_value, net_foreign_volume,
+                   foreign_buy_value, foreign_sell_value)
+              SELECT
+                  ticker, date,
+                  SUM(CASE WHEN broker_type = 'Asing' THEN net_value ELSE 0 END),
+                  SUM(CASE WHEN broker_type = 'Asing' THEN net_volume ELSE 0 END),
+                  SUM(CASE WHEN broker_type = 'Asing' AND net_value > 0 THEN net_value ELSE 0 END),
+                  SUM(CASE WHEN broker_type = 'Asing' AND net_value < 0 THEN ABS(net_value) ELSE 0 END)
+              FROM broker_summary
+              GROUP BY ticker, date
+          """)
+          inserted = cur.rowcount
+          conn.commit()
+          print(f"  Inserted {inserted:,} aggregated foreign_flow rows")
+
+          total = conn.execute("SELECT COUNT(*) FROM foreign_flow").fetchone()[0]
+          min_ff, max_ff = conn.execute("SELECT MIN(date), MAX(date) FROM foreign_flow").fetchone()
+          tickers = conn.execute("SELECT COUNT(DISTINCT ticker) FROM foreign_flow").fetchone()[0]
+          conn.close()
+          print(f"Final foreign_flow: {total:,} records | {tickers} tickers | {min_ff} → {max_ff}")
+          EOF
+
+      - name: Export foreign_flow to lean split file
+        run: |
+          python3 << 'EOF'
+          import sqlite3, os
 
           SOURCE = "idx_swing_trader.db"
           PART_A = "idx_broker_part_a.db"
-          PART_B = "idx_broker_part_b.db"
 
-          if not os.path.exists(SOURCE):
-              print("❌ FATAL: idx_swing_trader.db not found.")
-              exit(1)
-
-          total = sqlite3.connect(SOURCE).execute(
-              "SELECT COUNT(*) FROM broker_summary"
-          ).fetchone()[0]
-          min_d, max_d = sqlite3.connect(SOURCE).execute(
-              "SELECT MIN(date), MAX(date) FROM broker_summary"
-          ).fetchone()
-          print(f"Source DB: {total:,} records | {min_d} → {max_d}")
-
-          # Part A — Jan to Mar 2025
-          print("Building Part A (Jan–Mar 2025)...")
           if os.path.exists(PART_A):
               os.remove(PART_A)
-          shutil.copy(SOURCE, PART_A)
-          conn_a = sqlite3.connect(PART_A)
-          conn_a.execute("DELETE FROM broker_summary WHERE date >= '2025-04-01'")
-          conn_a.commit()
-          count_a = conn_a.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
-          min_a, max_a = conn_a.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
-          conn_a.execute("VACUUM")
-          conn_a.close()
-          size_a = os.path.getsize(PART_A) / 1024 / 1024
-          print(f"Part A: {count_a:,} records | {min_a} → {max_a} | {size_a:.1f} MB")
 
-          # Part B — Apr to Jun 2025
-          print("Building Part B (Apr–Jun 2025)...")
-          if os.path.exists(PART_B):
-              os.remove(PART_B)
-          shutil.copy(SOURCE, PART_B)
-          conn_b = sqlite3.connect(PART_B)
-          conn_b.execute("DELETE FROM broker_summary WHERE date < '2025-04-01'")
-          conn_b.commit()
-          count_b = conn_b.execute("SELECT COUNT(*) FROM broker_summary").fetchone()[0]
-          min_b, max_b = conn_b.execute("SELECT MIN(date), MAX(date) FROM broker_summary").fetchone()
-          conn_b.execute("VACUUM")
-          conn_b.close()
-          size_b = os.path.getsize(PART_B) / 1024 / 1024
-          print(f"Part B: {count_b:,} records | {min_b} → {max_b} | {size_b:.1f} MB")
+          conn_src = sqlite3.connect(SOURCE)
+          total = conn_src.execute("SELECT COUNT(*) FROM foreign_flow").fetchone()[0]
+          min_d, max_d = conn_src.execute("SELECT MIN(date), MAX(date) FROM foreign_flow").fetchone()
+          tickers = conn_src.execute("SELECT COUNT(DISTINCT ticker) FROM foreign_flow").fetchone()[0]
+          conn_src.close()
 
-          # Sanity check
-          if count_a + count_b != total:
-              print(f"❌ FATAL: count_a ({count_a:,}) + count_b ({count_b:,}) != total ({total:,})")
+          if total == 0:
+              print("FATAL: foreign_flow is empty — refusing to create split file")
               exit(1)
 
-          print(f"✅ Split verified: {count_a:,} + {count_b:,} = {total:,}")
+          # Export via ATTACH
+          conn = sqlite3.connect(SOURCE)
+          conn.execute(f"ATTACH DATABASE '{PART_A}' AS dst")
+          conn.execute("""
+              CREATE TABLE dst.foreign_flow (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  ticker TEXT NOT NULL,
+                  date TEXT NOT NULL,
+                  net_foreign_value REAL,
+                  net_foreign_volume REAL,
+                  foreign_buy_value REAL,
+                  foreign_sell_value REAL,
+                  UNIQUE(ticker, date)
+              )
+          """)
+          conn.execute("""
+              INSERT INTO dst.foreign_flow
+                  (ticker, date, net_foreign_value, net_foreign_volume,
+                   foreign_buy_value, foreign_sell_value)
+              SELECT ticker, date, net_foreign_value, net_foreign_volume,
+                     foreign_buy_value, foreign_sell_value
+              FROM main.foreign_flow
+          """)
+          conn.commit()
+          conn.execute("DETACH DATABASE dst")
+          conn.close()
+
+          # Vacuum the lean file
+          sqlite3.connect(PART_A).execute("VACUUM").connection.close()
+
+          size_mb = os.path.getsize(PART_A) / 1024 / 1024
+          print(f"idx_broker_part_a.db: {total:,} foreign_flow rows | {tickers} tickers | {min_d} → {max_d} | {size_mb:.1f} MB")
+
+          if size_mb > 95:
+              print(f"WARNING: file is {size_mb:.1f} MB — approaching GitHub 100 MB limit")
           EOF
 
-      - name: Commit split files to repo
+      - name: Remove old split files from git if present
+        run: |
+          git rm --cached idx_broker_part_b.db idx_broker_part_c.db idx_broker_part_d.db 2>/dev/null || true
+          rm -f idx_broker_part_b.db idx_broker_part_c.db idx_broker_part_d.db
+
+      - name: Commit split file to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add idx_broker_part_a.db idx_broker_part_b.db
+          git add idx_broker_part_a.db
           git diff --staged --stat
-          git commit -m "chore: update split files to 468,484 record baseline (H1 2025 complete)"
+          ROWS=$(python3 -c "import sqlite3; print(f\"{sqlite3.connect('idx_broker_part_a.db').execute('SELECT COUNT(*) FROM foreign_flow').fetchone()[0]:,}\")")
+          git commit -m "chore: update foreign_flow split file — ${ROWS} records"
           git push
