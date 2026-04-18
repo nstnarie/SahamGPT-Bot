@@ -42,7 +42,6 @@ from database.data_loader import (
     load_prices_as_dataframe, load_index_df, load_foreign_flow_df,
 )
 from scraper.price_scraper import PriceScraper, LQ45_TICKERS
-from scraper.flow_scraper import FlowScraper
 from signals.signal_combiner import SignalCombiner
 from signals.market_regime import MarketRegimeFilter
 from notifications.telegram_notifier import (
@@ -96,13 +95,6 @@ def run_daily_pipeline(
 
         price_scraper = PriceScraper(config)
         price_scraper.scrape_and_store(session, tickers, start_date=lookback_start)
-
-        # Estimate foreign flow from price patterns
-        flow_scraper = FlowScraper(config)
-        for ticker in tickers:
-            pdf = load_prices_as_dataframe(session, ticker)
-            if not pdf.empty:
-                flow_scraper.estimate_and_store(session, pdf, ticker)
 
         logger.info("Data scraping complete.")
 

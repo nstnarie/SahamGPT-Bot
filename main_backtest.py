@@ -29,7 +29,7 @@ from database.data_loader import (
     data_quality_check,
 )
 from scraper.price_scraper import PriceScraper, LQ45_TICKERS
-from scraper.flow_scraper import FlowScraper, FundamentalScraper
+from scraper.flow_scraper import FundamentalScraper
 from backtest.engine import BacktestEngine
 from backtest.metrics import format_metrics_report
 from reports.visualizer import generate_all_reports
