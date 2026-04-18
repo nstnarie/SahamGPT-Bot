@@ -1,4 +1,4 @@
-# IDX Swing Trader — Automation, Telegram & Optimisation Guide
+# IDX Swing Trader — Automation, Telegram & Optimisation Guide (Step 8)
 
 > **DISCLAIMER**: Educational and research purposes only. Past performance does not guarantee future results.
 
@@ -161,12 +161,13 @@ Install Python, clone the project, set up cron or systemd.
 ### What the Daily Pipeline Does
 
 Each run:
-1. Scrapes latest prices from Yahoo Finance (~2-5 min for 45 stocks)
-2. Estimates foreign flow from price-volume patterns
-3. Computes all signals (regime + big money + technical)
-4. Ranks stocks by composite score
-5. Sends top 5 to Telegram with AI reasoning
-6. Logs everything to `daily_pipeline.log`
+1. Scrapes latest prices from Yahoo Finance (~5-10 min for 137 stocks)
+2. Applies 20-day breakout detection with volume spike filter
+3. Runs MA200, ATR%, and KSEI foreign flow hard filters
+4. Computes composite signal quality score for all breakout signals
+5. Applies rolling 6-entry-per-10-day throttle (selects highest ranked only)
+6. Sends top picks to Telegram with AI reasoning
+7. Logs everything to `daily_pipeline.log`
 
 ### What You Receive on Telegram
 
@@ -223,10 +224,14 @@ Walk-forward solves this by:
 
 ```bash
 # First time: scrape data + run backtest with default parameters
-python main_backtest.py --scrape --start 2021-01-01 --end 2024-12-31
+python main_backtest.py --scrape --start 2024-01-01 --end 2024-12-31
+
+# Or on GitHub Actions: Actions → Analyze Trade Log → Run workflow
+# Downloads trade_analysis.md artifact with full breakdown
 ```
 
 Check `reports/metrics_summary.txt` for baseline performance.
+Expected: 2024 PF ~1.40, Return ~+6%, 2025 PF ~1.75, Return ~+15%.
 
 ### Step 2: Run Walk-Forward Optimisation
 
