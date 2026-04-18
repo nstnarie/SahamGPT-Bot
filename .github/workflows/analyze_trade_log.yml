@@ -466,6 +466,15 @@ jobs:
           print(report)
           PYEOF
 
+      - name: Analyze signal quality
+        run: |
+          pip install scipy -q
+          python scripts/analyze_signal_quality.py \
+            --trade-log reports/trade_log.csv \
+            --output reports/signal_quality_analysis.md \
+            --big-winner-pct ${{ github.event.inputs.min_pnl_pct_winner }}
+        continue-on-error: true
+
       - name: Create Excel trade log
         run: |
           python3 << 'PYEOF'
@@ -504,6 +513,7 @@ jobs:
           name: trade-analysis-${{ github.event.inputs.start_date }}-to-${{ github.event.inputs.end_date }}
           path: |
             reports/trade_analysis.md
+            reports/signal_quality_analysis.md
             reports/metrics_summary.txt
             reports/trade_log.csv
             reports/trade_log.xlsx
