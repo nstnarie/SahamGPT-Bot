@@ -311,6 +311,44 @@ def load_broker_accumulation_df(session: Session, ticker: str,
     return result
 
 
+def load_fp_ratios(session: Session,
+                   start_date: Optional[date] = None,
+                   end_date: Optional[date] = None) -> Dict[str, float]:
+    """
+    Compute foreign participation ratio per ticker from broker_summary.
+
+    fp_ratio = Asing traded value (buy+sell) / total traded value (all brokers).
+    Range 0.0–1.0. High value = foreigners dominate trading; low = domestics dominate.
+
+    Used as an entry filter: high-fp stocks show lower win rates because foreigners
+    use them as liquid hedges (sell during drawdowns, buy during rallies), creating
+    false breakouts driven by domestic retail momentum, not fundamental buying.
+    """
+    filters = []
+    params: Dict = {}
+    if start_date:
+        filters.append("date >= :start_date")
+        params["start_date"] = str(start_date)
+    if end_date:
+        filters.append("date <= :end_date")
+        params["end_date"] = str(end_date)
+
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    sql = text(f"""
+        SELECT ticker,
+            CAST(
+                SUM(CASE WHEN broker_type = 'Asing' THEN buy_value + sell_value ELSE 0 END)
+                AS REAL
+            ) /
+            NULLIF(SUM(buy_value + sell_value), 0) AS fp_ratio
+        FROM broker_summary
+        {where}
+        GROUP BY ticker
+    """)
+    rows = session.execute(sql, params).fetchall()
+    return {r[0]: float(r[1]) for r in rows if r[1] is not None}
+
+
 def load_index_df(session: Session, index_code: str = "IHSG",
                    start_date: Optional[date] = None,
                    end_date: Optional[date] = None) -> pd.DataFrame:

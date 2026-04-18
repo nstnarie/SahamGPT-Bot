@@ -138,6 +138,13 @@ class EntryFilterConfig:
     min_atr_pct: float = 1.75
     use_atr_filter: bool = True
 
+    # EXP: fp_ratio filter — block high foreign-participation stocks.
+    # 2024 analysis: low-fp (< 0.40) = 52% WR, +117.7M; high-fp (>= 0.40) = 32% WR, -100M.
+    # fp_ratio = Asing traded value / total traded value (computed from broker_summary).
+    # Note: uses full-period data (2024-2025 broker_summary) — minor lookahead for 2024 backtest.
+    max_fp_ratio: float = 0.40
+    use_fp_filter: bool = True
+
 
 @dataclass
 class SignalRankingConfig:
