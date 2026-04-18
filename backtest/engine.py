@@ -5,6 +5,7 @@ Event-driven backtester using the new breakout signal engine.
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import date
 from typing import Dict, List, Optional, Tuple
@@ -165,6 +166,17 @@ class BacktestEngine:
                                         continue
 
                         sig_df = all_signals.get(ticker)
+
+                        # Entry-day breakout_strength filter (Step 11):
+                        # Applied at T+1 open (not signal day T) — on signal day breakout_strength
+                        # is always >0 by definition, so the filter must run here at execution.
+                        # Safe threshold -8%: blocks extreme overnight gap-downs only.
+                        ef = self.config.entry_filter
+                        if ef.use_breakout_strength_filter and sig_df is not None and current_date in sig_df.index:
+                            bs = sig_df.loc[current_date].get("breakout_strength", float("nan"))
+                            if not math.isnan(bs) and bs < ef.min_breakout_strength:
+                                continue
+
                         atr = 0.0
                         if sig_df is not None and current_date in sig_df.index:
                             atr = sig_df.loc[current_date].get("atr", 0)
