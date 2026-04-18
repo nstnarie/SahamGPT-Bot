@@ -52,7 +52,7 @@ class MarketRegimeConfig:
     breadth_bull_threshold: float = 0.60
     breadth_bear_threshold: float = 0.40
     exposure_multiplier: Dict[str, float] = field(default_factory=lambda: {
-        "BULL": 1.0, "SIDEWAYS": 0.5, "BEAR": 0.0,
+        "BULL": 1.0, "SIDEWAYS": 1.0, "BEAR": 0.0,  # EXP: SIDEWAYS 0.5→1.0 (was halving all positions)
     })
 
 
