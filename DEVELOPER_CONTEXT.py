@@ -208,11 +208,39 @@ data loss or an incorrect code change that takes hours to fix.
 # PROJECT STATUS
 # ══════════════════════════════════════════════════════════════
 
-STATUS = "ACTIVE — feature/v10-experiments baseline confirmed on both 2024+2025 data. Next: scrape new 28 tickers then re-run all experiments on full 2024+2025 dataset."
+STATUS = (
+    "ACTIVE — Exp 13–24 experiment sequence in progress (feature/v10-experiments). "
+    "Step 0 + Step 1 complete (Exp 9/11 residue removed). "
+    "Exp 17 REJECTED (cooldown bypass fired too early). "
+    "Next: Exp 18 (A-tier cluster exemption). "
+    "NEW correct baselines: 2024 PF 0.54 / −4.14% | 2025 PF 3.63 / +17.70% "
+    "(runs 24220505468 / 24220636277)."
+)
 
 CURRENT_VERSION = "v10-experiments (feature branch)"
 
 LATEST_BACKTEST_RESULTS = {
+    "2024_clean_baseline_v10exp": {
+        "trades": 34, "win_rate": "38.2%", "pnl": "Rp -41M", "pf": 0.54,
+        "total_return": "-4.14%", "max_drawdown": "-4.84%", "max_dd_days": 197,
+        "sharpe": -1.78, "sortino": -2.20, "calmar": -0.91, "exposure": "56.1%",
+        "note": "CURRENT 2024 BASELINE — feature/v10-experiments, post Exp 9/11 cleanup, "
+                "Exp 2+4+12 active, 109 tickers, real_broker=true. "
+                "Supersedes run 24199627413 which had Exp 9 NO_FOLLOWTHROUGH residue.",
+        "run_id": "24220505468",
+        "date": "2026-04-10",
+    },
+    "2025_clean_baseline_v10exp": {
+        "trades": 35, "win_rate": "48.6%", "pnl": "Rp +177M", "pf": 3.63,
+        "total_return": "17.70%", "max_drawdown": "-3.38%", "max_dd_days": 51,
+        "sharpe": 1.54, "sortino": 3.01, "calmar": 5.64, "exposure": "69.9%",
+        "benchmark_return": "20.71%", "benchmark_max_dd": "-17.76%",
+        "note": "CURRENT 2025 BASELINE — feature/v10-experiments, post Exp 9/11 cleanup, "
+                "Exp 2+4+12 active, 109 tickers, real_broker=true. "
+                "Supersedes run 24199629162. Cleanup improved both years.",
+        "run_id": "24220636277",
+        "date": "2026-04-10",
+    },
     "2025_synthetic": {
         "trades": 55, "win_rate": "31%", "pnl": "Rp +60M", "pf": 1.38,
         "note": "SUPERSEDED. Used synthetic FF from ForeignFlow table.",
@@ -276,6 +304,98 @@ LATEST_BACKTEST_RESULTS = {
 # ══════════════════════════════════════════════════════════════
 
 V10_EXPERIMENTS = {
+    "exp17_cooldown_bypass_new_60d_high": {
+        "hypothesis": "The blanket 30d post-STOP_LOSS cooldown locks out real trend resumption. "
+                      "Bypassing it when the stock makes a new 60d-high close above the pre-stop "
+                      "breakout level preserves protection while allowing re-entry on genuine continuation. "
+                      "Reference cases: ADRO (Apr stop → Nov rally), TOTL (Aug stop → Oct rally), "
+                      "PNBN/LINK/JPFA ALL-PASS days ignored in 2024.",
+        "change": "backtest/portfolio.py: added entry_breakout_level field to Position. "
+                  "backtest/engine.py: on STOP_LOSS, record entry_breakout_level → stopped_breakout_levels[ticker]. "
+                  "On new BUY signal during cooldown: if signal_day.close > stopped_breakout_levels[ticker] → bypass.",
+        "result": {
+            "2024": {"trades": 38, "win_rate": "31.6%", "total_return": "-7.79%",
+                     "max_drawdown": "-7.96%", "pf": 0.33, "sharpe": -2.42},
+            "2025": {"trades": 35, "win_rate": "48.6%", "total_return": "+17.70%",
+                     "max_drawdown": "-3.38%", "pf": 3.63, "sharpe": 1.54,
+                     "note": "ZERO bypasses fired in 2025 — result identical to clean baseline"},
+        },
+        "vs_baseline": "2024: PF 0.54→0.33 WORSE (−0.21), return −4.14%→−7.79% (−3.65pp). "
+                       "2025: no change (0 bypasses). Winning trades: 13→12 (−1). "
+                       "New 2024 trades unlocked: TOTL re-entry Aug 14 → EMERGENCY_STOP −13.72% "
+                       "(9 days after stop, trend hadn't resumed); BTPS → EMERGENCY_STOP −13.05%; "
+                       "EMTK re-entry Dec 9 → STOP_LOSS −9.06%. All bypassed re-entries were losers.",
+        "verdict": "REJECTED. Price-based bypass fires too early — close > old_breakout_level is "
+                   "satisfied almost immediately after a stop (stock just needs to tick up slightly). "
+                   "TOTL stopped Aug 5, bypass triggered Aug 14 (9 days later), real rally was Sep–Oct. "
+                   "⚠️ Any future cooldown bypass must add a minimum elapsed-time guard (≥ 15 trading days) "
+                   "in addition to the price condition. The concept is sound; the implementation is too loose.",
+        "run_ids": {"2024": "24203548317", "2025": "24203761354"},
+        "date": "2026-04-10",
+    },
+    "exp8_breakout_margin_filter": {
+        "hypothesis": "Require close >= 1.5% above 60-day high before confirming breakout. "
+                      "Targets 56% fakeout-reversal signature in 2024 losers: 15/27 trades "
+                      "entered on 1-tick resistance break, stopped at -3% to -7% within 6-10 days. "
+                      "Expected safe for 2025: TINS +118%, EMTK +77%, PTRO +45% had explosive "
+                      "day-1 momentum that easily clears 1.5%.",
+        "change": "config.py: added BreakoutConfig.breakout_margin_pct = 0.015. "
+                  "signals/signal_combiner.py: _add_breakout_signals() — changed "
+                  "is_breakout from `close > high_Nd` to `close > high_Nd * (1 + breakout_margin_pct)`.",
+        "result": {
+            "2024": {"trades": 30, "win_rate": "33.3%", "pnl": "Rp -81M", "pf": 0.23,
+                     "total_return": "-8.06%", "max_drawdown": "-8.70%", "sharpe": -2.62},
+            "2025": {"trades": 31, "win_rate": "32.3%", "pnl": "Rp +28M", "pf": 1.32,
+                     "total_return": "2.79%", "max_drawdown": "-3.12%", "sharpe": -0.53},
+        },
+        "vs_baseline": "2024: -8.06% vs -6.05% WORSE (-2.01pp, -Rp 21M). "
+                       "2025: +2.79% vs +14.55% CATASTROPHIC (-11.76pp, -Rp 117M). "
+                       "Trade count dropped 42→30 (2024) and 41→31 (2025). "
+                       "Win rate DOWN in both years. PF collapsed from 2.52 → 1.32 in 2025.",
+        "verdict": "REJECTED. The 1.5% margin is a blunt instrument that doesn't distinguish "
+                   "fakeouts from genuine breakouts — it just shifts WHICH breakouts enter and "
+                   "at what price. Three failure modes: "
+                   "(1) Removed slow-building 2025 winners: PTRO +45%+14.5%, DSSA +24.7%, "
+                   "GGRM +14.8%+15.5% — all grind through resistance over hours, not gap 1.5% instantly. "
+                   "(2) Freed cluster slots filled with WORSE trades: TPIA -13.1% emergency stop day 1, "
+                   "AKRA -13.1%, BBNI -4.7% — new entries were not better, they were worse. "
+                   "(3) 2024 fakeout pattern is a bear market regime problem (no follow-through in "
+                   "downtrend), not an entry margin problem — the margin doesn't fix zero follow-through. "
+                   "⚠️ Revert: set BreakoutConfig.breakout_margin_pct = 0.0 before next experiment "
+                   "OR just reset is_breakout condition to `close > high_Nd` in signal_combiner.py.",
+        "run_ids": {"2024": "24177676602", "2025": "24177677897"},
+        "date": "2026-04-09",
+    },
+    "exp11_sector_cohort_momentum": {
+        "hypothesis": "Skip entry when ticker's sector cohort equal-weighted price index is below "
+                      "its own SMA20. Symmetric with Exp 2 IHSG filter. Targets 2024 Financial "
+                      "Services + Real Estate cluster (9 combined losers). "
+                      "Opus analysis showed sector downtrend as root cause of 2024 clustering.",
+        "change": "signals/sector_regime.py (new): SectorRegimeFilter class. "
+                  "signals/signal_combiner.py: sector_entry_ok gate in _evaluate_signal. "
+                  "backtest/engine.py: passes stock_sectors to generate_signals_universe. "
+                  "config.py: exp11_sector_filter_enabled=True, exp11_sector_ma_period=20. "
+                  "scraper/price_scraper.py: TICKER_SECTORS dict (CI fallback). "
+                  "main_backtest.py: falls back to TICKER_SECTORS when DB stocks table empty.",
+        "result": {
+            "2024": {"trades": 39, "win_rate": "30.8%", "pnl": "Rp -78M", "pf": 0.38,
+                     "total_return": "-7.77%", "max_drawdown": "-8.13%", "sharpe": -2.59},
+            "2025": {"trades": 40, "win_rate": "42.5%", "pnl": "Rp +147M", "pf": 2.57,
+                     "total_return": "14.74%", "max_drawdown": "-3.22%", "sharpe": 1.13},
+        },
+        "vs_baseline": "2024: -7.77% vs -6.05% WORSE (-1.72pp, -Rp 17M). "
+                       "2025: +14.74% vs +14.55% marginal improvement (+0.19pp, +Rp 2M). "
+                       "Net: experiment hurt the year it was designed to fix.",
+        "verdict": "REJECTED. The filter blocked 3 good 2024 losers (TLKM, ISAT, EXCL) but also "
+                   "a winner (ICBP +2.08%) and redirected capital into worse entries (MEDC -5.93%, "
+                   "MAPA -8.43%). Blocking one sector just shifted entries to equally bad trades "
+                   "in other sectors. Root cause: yfinance sector labels create noisy IDX cohorts — "
+                   "TLKM and EMTK share 'Communication Services' despite very different behavior. "
+                   "Concept is sound but needs IDX-native GICS classification to work. "
+                   "⚠️ Set exp11_sector_filter_enabled=False before merging feature → main.",
+        "run_ids": {"2024": "24176911049", "2025": "24176912534"},
+        "date": "2026-04-09",
+    },
     "exp6_ihsg_5d_momentum": {
         "hypothesis": "Exp 2 single-day IHSG check passes during multi-day rollovers. "
                       "Requiring IHSG 5d return > 0 filters entries during sustained weakness. "
@@ -385,6 +505,13 @@ V10_EXPERIMENTS = {
 # ══════════════════════════════════════════════════════════════
 
 IN_PROGRESS = """
+0. EXP 13–24 SEQUENCE — IN PROGRESS (Apr 10, 2026)
+   - Step 0 (sanity check): DONE ✅ — 5/22 mega-winners captured under Exp 12, same as original
+   - Step 1 (cleanup): DONE ✅ — Exp 9 NO_FOLLOWTHROUGH removed, Exp 11 disabled (commit 40a7600)
+   - New clean baselines established: 2024 run 24220505468 | 2025 run 24220636277
+   - Exp 17 REJECTED ❌ (commit 2dce49a reverted at 32107bb) — bypass too early, price-based only
+   - NEXT: Exp 18 (A-tier cluster exemption) — implement per v23 Section 8 spec
+
 1. BROKER SUMMARY DATA BACKFILL — 2025 FULLY COMPLETE ✅
    - H1 2025 (Jan–Jun): COMPLETE ✅ — 103–109 tickers/day
    - Q3 2025 (Jul–Sep): COMPLETE ✅ — 64 days, 105–107 tickers/day
@@ -408,13 +535,12 @@ IN_PROGRESS = """
      broker_summary. Fixed via self-healing backfill step in run_backtest.yml.
 
 4. TICKER UNIVERSE — EXPANDED (as of 2026-04-06)
-   - feature/v10-experiments: 137 tickers (136 confirmed + INET pending addition to code)
-   - main: 109 tickers (original — stays until 2024 backfill complete)
-   - 27 tickers added to feature Apr 6 2026: AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB,
+   - feature/v10-experiments: 137 tickers (109 original + 28 new)
+   - main: 109 tickers (original — scraper uses this)
+   - 28 tickers added to feature Apr 2026: AADI, ADMR, BREN, BRIS, CUAN, DEWA, PANI, PSAB,
      RAJA, RATU, WIFI, ADHI, AGRO, AMAN, ARGO, ARTO, ASSA, AVIA, BNBA, DOID, ENRG, IMAS,
-     KRAS, POWR, SMBR, SMDR, WIIM
-   - INET: ⬜ to be added to feature branch later (Rp 258, Rp 106B/day — solid liquidity)
-   - More additional tickers may be added before Step 2 scraping begins
+     KRAS, POWR, SMBR, SMDR, WIIM, INET
+   - INET added to feature branch Apr 9, 2026 (Rp 258, Rp 106B/day)
    - Excluded (sub-Rp150): MLPL(91), ABBA(44), ACST(98), BKSL(108)
    - Excluded (too thin): AMAR(0.11), CMNP(0.37), MCAS(0.13)
    - ENRG: verify price manually on Stockbit before scraping (yfinance shows unusual Rp 1500)
@@ -717,6 +843,42 @@ KEY_LEARNINGS = """
     with out-of-range data are correctly detected and backfilled from Yahoo Finance.
     Also added IHSG backfill block (same issue — index_daily had only 2025 data).
 
+23. ALWAYS COMMIT AND PUSH BEFORE TRIGGERING CI
+    Discovered Apr 9 2026: triggered 3 backtest runs that all returned identical
+    results to the baseline because local code changes had not been committed or
+    pushed. GitHub Actions checks out code from the remote branch — local edits
+    are invisible until pushed. Rule: always run `git status` and confirm the
+    branch is ahead of origin before triggering any workflow run.
+
+24. stocks TABLE IN CI ARTIFACT MAY NOT HAVE SECTOR DATA
+    The stocks table (ticker → sector mapping) is only populated by flow_scraper.py,
+    called from daily_signals.yml. When the most recent idx-database artifact was
+    uploaded by initial_scrape.yml or scrape_broker_summary.yml, the stocks table
+    is empty → stock_sectors dict is empty → any sector-based filter is a no-op.
+    Fix: hardcode TICKER_SECTORS dict in scraper/price_scraper.py as fallback.
+    main_backtest.py uses DB first, falls back to dict. Source: yfinance stock.info.
+
+26. ENTRY MARGIN FILTER RESHUFFLES TRADES RATHER THAN IMPROVING QUALITY
+    Discovered Apr 9 2026 (Exp 8): requiring close >= 1.5% above 60d high caused
+    2025 to collapse from +14.55% to +2.79%. The filter blocked slow-building winners
+    (PTRO +45%, DSSA +24%, GGRM +15%) that grind through resistance over hours.
+    When these slots were blocked, the cluster limit freed capacity for WORSE new trades
+    (TPIA -13.1% emergency stop on day 1, AKRA -13.1%). The 2024 fakeout-reversal
+    pattern is a bear market regime problem — breakouts fire but market provides no
+    follow-through. A fixed entry margin cannot fix zero follow-through.
+    Lesson: entry-side filters for fakeouts are blunt — address fakeouts on the EXIT
+    side instead (Exp 9: early exit if no +1% gain by day 8).
+
+25. SECTOR COHORT FILTER FAILS WITH YFINANCE SECTOR LABELS ON IDX
+    Discovered Apr 9 2026 (Exp 11): equal-weighted sector cohort momentum filter
+    (close > SMA20) made 2024 worse (-7.77% vs -6.05%) despite correct concept.
+    Root cause: yfinance groups TLKM (large-cap telco) and EMTK (volatile mid-cap
+    media) in the same 'Communication Services' cohort — their opposite price
+    behaviors cancel out, making the cohort signal unreliable. Additionally,
+    blocking entries in weak sectors redirected capital into equally bad entries
+    in other sectors (MEDC -5.93%, MAPA -8.43% appeared as new trades).
+    The filter needs IDX-native GICS classification to be effective. Deferred.
+
 22. ARTIFACT CHAIN RISK — DAILY SIGNALS OVERWRITES PRICE DATA RANGE
     daily_signals.yml uploads idx-database artifact daily with ONLY today's prices.
     If run_backtest.yml downloads this artifact and the backfill check only looks
@@ -774,35 +936,56 @@ STEP 1 — Complete 2024 broker data backfill (original 109 tickers) ✅ COMPLET
   Q4 2024: ✅ COMPLETE (Apr 9, 2026) — 5 runs (batch1+2+3 full quarter, batch4 Oct-Nov15, Nov16-Dec31)
   Final: 2,071,251 records | 2024-01-02→2025-12-30 | part_a 1,269,996 + part_b 801,255 ✅
 
-STEP 2 — Scrape additional 28 tickers (price + broker data) ⬜ IN PROGRESS (Apr 9, 2026)
-  2a. Merge scraper/price_scraper.py (137 tickers) from feature → main ⬜
-  2b. Run initial_scrape.yml — OHLCV 2021-01-01→present for 28 new tickers ⬜
-  2c. Run scrape_broker_summary.yml with custom tickers override, 2024-01-01→2025-12-31 ⬜
-      Sequential batches (use tickers= override not batch number).
+STEP 2 — Scrape additional 28 tickers (price + broker data) 🔄 IN PROGRESS (Apr 9, 2026)
+  2a. scrape_broker_summary.yml — 28 tickers, 2024-01-01→2025-12-31, 8 sequential quarterly runs
+      Use tickers= override field (not batch=). Run on main branch.
       Tickers: AADI,ADMR,BREN,BRIS,CUAN,DEWA,PANI,PSAB,RAJA,RATU,WIFI,
                ADHI,AGRO,AMAN,ARGO,ARTO,ASSA,AVIA,BNBA,DOID,ENRG,IMAS,
                KRAS,POWR,SMBR,SMDR,WIIM,INET
-  2d. export_summary.yml → update_split_files.yml → verify total ⬜
-  ⚠️ Verify ENRG price manually on Stockbit before scraping — yfinance shows unusual Rp 1500
-  ⚠️ PARALLEL STRATEGY: 2c can run on main while experiments run on feature branch.
+      Run 1 (2024-Q1): 🔄 IN PROGRESS — run 24173626928
+      Run 2 (2024-Q2): ⬜ Pending
+      Run 3 (2024-Q3): ⬜ Pending
+      Run 4 (2024-Q4): ⬜ Pending
+      Run 5 (2025-Q1): ⬜ Pending
+      Run 6 (2025-Q2): ⬜ Pending
+      Run 7 (2025-Q3): ⬜ Pending
+      Run 8 (2025-Q4): ⬜ Pending
+  2b. initial_scrape.yml — OHLCV 2021-01-01→present for 28 new tickers ⬜ (after 2a complete)
+  2c. export_summary.yml → update_split_files.yml → verify total ⬜
+  ⚠️ PARALLEL STRATEGY: 2a can run on main while experiments run on feature branch.
      run_backtest.yml from feature does NOT upload idx-database — confirmed safe.
 
 STEP 3 — Re-run ALL v10 experiments on full dataset ⬜
-  Dataset: 2024-01-01→2025-12-31 | 136 tickers | real_broker=true
+  Dataset: 2024-01-01→2025-12-31 | 137 tickers | real_broker=true
   All prior experiment results (Exp 1–7) were on 2025-only, 109-ticker data.
-  Re-test everything from scratch. Exp 5 (Rp 150 filter) likely stays rejected.
+  Exp 11 already tested on 109-ticker 2024+2025 data — REJECTED.
 
-  Experiments queued (one per session, on feature/v10-experiments):
+  ❌ Exp 8 REJECTED (Apr 9, 2026) — Breakout Margin Filter (close >= 1.5% above 60d high)
+     2024: -8.06% vs -6.05% WORSE. 2025: +2.79% vs +14.55% CATASTROPHIC.
+     Filter blocked slow-building 2025 winners, freed slots for worse replacement trades.
+     ⚠️ Revert: reset is_breakout to `close > high_Nd` in _add_breakout_signals() before Exp 9.
+     Config residue: BreakoutConfig.breakout_margin_pct = 0.015 exists but is now DEAD WEIGHT.
+     Either remove it or set to 0.0 — it should not be active.
+
+  NEXT EXPERIMENT: Exp 9 — Early No-Follow-Through Exit
+  File: backtest/portfolio.py (exit logic)
+  Hypothesis: if price hasn't achieved +1% at any point by day 8 post-entry, exit.
+              Targets the fakeout-reversal pattern on the EXIT side: slow bleeds that
+              eventually hit the -7% stop on day 6-10. Cut early before the stop fires.
+  Expected impact: removes the slow-bleed losers from 2024 without touching 2025 winners
+                   (TINS, EMTK, PTRO all showed immediate follow-through on entry day).
+
+  Subsequent experiments (one per session):
+    ⏸ Exp 10: ATR cap (reframe to 7% threshold or regime-conditional) — signal_combiner.py
+    ⏸ Exp 10: ATR cap (reframe to 7% threshold or regime-conditional) — signal_combiner.py
+    ⏸ Exp 12: Consecutive loss throttle (3 losses → max 2 entries for 10d) — engine.py
     ⏸ Exp 1 re-test: Emergency stop -12% → -10%
-    ⏸ Exp 2 re-test: IHSG market filter (currently accepted — confirm holds)
+    ⏸ Exp 2 re-test: IHSG market filter (currently accepted — confirm on full data)
     ⏸ Exp 3 re-test: FF magnitude filter
-    ⏸ Exp 4 re-test: Post-TREND_EXIT cooldown 30d (currently accepted — confirm holds)
+    ⏸ Exp 4 re-test: Post-TREND_EXIT cooldown 30d (currently accepted — confirm on full data)
     ⏸ Exp 5 re-test: Remove Rp 150 min price filter (expect rejected again)
     ⏸ Exp 6 re-test: IHSG 5d momentum filter (expect rejected again)
     ⏸ Exp 7 re-test: Financial sector entry limit (may fire now with 2024 data)
-    ⏸ Exp 8: Breakout margin filter (close ≥1–2% above 60d high) — signals/signal_combiner.py
-    ⏸ Exp 9: Early no-follow-through exit (no +1% by day 8) — backtest/portfolio.py
-    ⏸ Exp 10: ATR/price volatility cap (ATR > 5% of close → skip) — signals/signal_combiner.py
     ⬜ Exp 7a/7b/7c: S/R detection, averaging up, chart patterns — ON HOLD (post-integration)
 
 STEP 4 — Integration ⬜

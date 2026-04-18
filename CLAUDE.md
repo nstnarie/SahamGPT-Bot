@@ -178,3 +178,44 @@ Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.
 Most recent: `HANDOFF_SESSION_2026_04_18_v29.md` — Step 7+8 consolidated.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
+
+---
+
+## AI Assistant Operating Rules
+
+These rules exist because violations caused near data loss in the past.
+
+**RULE 0 — Read before you answer**
+Never answer questions about workflow behaviour, data safety, file interactions, or code logic without first reading the actual files. The sequence for every question: (1) identify relevant files, (2) read them, (3) answer based on what code ACTUALLY does.
+
+**RULE 1 — Workflow parallelism: default is SEQUENTIAL**
+Before saying two workflows are safe to run in parallel, verify by reading both files:
+- Do they restore the same artifact? → SEQUENTIAL ONLY
+- Do they write to the same DB tables? → SEQUENTIAL ONLY
+- Do they upload to the same artifact name? → SEQUENTIAL ONLY
+
+Known shared artifact `idx-database`: written by `scrape_broker_summary.yml`, `initial_scrape.yml`, `bootstrap_database.yml`, `daily_signals.yml` — NONE may run in parallel with each other.
+
+**RULE 2 — Data safety is non-negotiable**
+Historical broker data takes weeks to re-scrape, Stockbit token expires every 24h, GitHub Actions has limited runtime. Data loss is unrecoverable. Before any operation touching the DB or artifacts: read the code, identify all reads/writes, confirm no conflicts.
+
+**RULE 3 — No speculation, only verified facts**
+Arie is data-driven and catches speculation immediately. If uncertain, say so and read the code first. Never present assumptions as facts.
+- BAD: "The scraper probably uses upsert so duplicates won't occur"
+- GOOD: "Let me check scraper/flow_scraper.py to confirm"
+
+**RULE 4 — Backtest changes must not bleed into live code**
+Live signals run from `main`. Experiments must be isolated to feature branches or disabled via config flags. Never modify live signal logic as a "quick test".
+
+**RULE 5 — Locked parameters (never change without backtest data)**
+These have been tested extensively. Do not change without running a full 2024+2025 backtest to verify:
+- `min_hold_days = 5` (tested 3, caused -90M noise exits)
+- `emergency_stop_pct = 0.12` (tested 0.10, worsened both years)
+- `circuit_breaker_losses = 0` (disabled — cascade effect worsens results)
+- `breakout_period = 20` (tested 60, misses mega-winners by 21 days)
+- `max_entries_per_week = 6` (tested 3/5/7/8/10 — 6 is the sweet spot)
+
+**RULE 6 — GitHub Actions patterns**
+- Always gate artifact upload on a data count check (never overwrite with empty DB)
+- Never restore artifact without `GH_TOKEN` (silently fails)
+- `dawidd6/action-download-artifact@v6` with `if_no_artifact_found: warn` + `continue-on-error: true` is the correct pattern for optional artifacts
