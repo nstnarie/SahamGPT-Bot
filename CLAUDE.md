@@ -12,11 +12,15 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 8 — 2026-04-18)
+## Current State (Step 9 — 2026-04-18)
 
-**Backtest results** (fresh Yahoo Finance data, synthetic FF):
-- 2024: PF 1.40, +6.4% return, 36% WR, 75 trades
-- 2025: PF 1.75, +14.9% return, 46% WR, 98 trades
+**Backtest results** (real Asing broker data — synthetic FF fully removed):
+- 2024: PF 0.53, -13.7%, 34% WR, 101 trades — **still losing, active research problem**
+- 2025: PF 1.65, +19.7%, 46% WR, 98 trades — profitable
+
+Previous results with synthetic FF (for reference only — synthetic is gone):
+- 2024: PF 1.40, +6.4% (synthetic was accidentally acting as quality pre-filter)
+- 2025: PF 1.75, +14.9%
 
 **Key config values** (all in `config.py`):
 ```python
@@ -53,7 +57,7 @@ database/
   data_loader.py              Loads data from DB into DataFrames
 scraper/
   price_scraper.py            Yahoo Finance scraper, LQ45_TICKERS list (137 tickers)
-  flow_scraper.py             Synthetic FF estimator + FundamentalScraper
+  flow_scraper.py             FundamentalScraper only — synthetic FF removed
 reports/
   visualizer.py               equity curve, drawdown, heatmap charts
 ```
@@ -127,9 +131,13 @@ reports/
 | Broker summary (raw) | Stockbit chartbit API | 2024-01-02 to present (2.6M rows, 137 tickers) |
 | KSEI net flow | Stockbit chartbit (fitemid=3194) | 2024-2025 (stored in foreign_flow) |
 
-**Architecture**: `broker_summary` (raw) → aggregated into `foreign_flow` (net Asing per ticker/day). Workflows use the 4.8MB `idx_broker_part_a.db` lean file (foreign_flow only) instead of trying to commit the full 450MB broker_summary.
+**Architecture**: `broker_summary` (raw Stockbit data) → aggregated into `foreign_flow` (net Asing per ticker/day) → used by backtest and daily signals.
 
-**Note**: With real Asing data, 2024 is still losing (PF 0.53, -13.7%). The MPW=6 fix that worked on synthetic data doesn't generalize to real Asing flows. This is the active research problem.
+**Split file**: `idx_broker_part_a.db` (4.8MB, committed to repo) contains pre-aggregated `foreign_flow` only. GitHub workflows restore from this instead of committing the full 450MB broker_summary.
+
+**No synthetic data anywhere**: `estimate_and_store()` is fully removed from both `main_backtest.py` and `main_daily.py`. The `upsert_foreign_flow()` function overwrites existing rows — synthetic was silently replacing real data on every daily run. That bug is now fixed.
+
+**When no FF data exists for a ticker** (e.g., data gap): the signal pipeline treats it as a domestic stock with no FF signal — no FF filters applied, no fake values injected.
 
 ---
 
@@ -159,15 +167,14 @@ reports/
 ## Running a Backtest
 
 ```bash
-# Fresh scrape + backtest
+# Fresh scrape + backtest (prices only — broker data must be scraped separately)
 python main_backtest.py --scrape --start 2024-01-01 --end 2024-12-31 --output reports_2024
 
-# Without scrape (uses cached DB data)
+# Without scrape (uses cached DB data — recommended when DB already populated)
 python main_backtest.py --start 2024-01-01 --end 2024-12-31
-
-# With real broker data
-python main_backtest.py --scrape --real-broker --start 2025-01-01 --end 2025-12-31
 ```
+
+Note: `--real-broker` flag has been removed. Real Asing data is always used (from `foreign_flow` table).
 
 Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG charts.
 
@@ -177,7 +184,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_18_v29.md` — Step 7+8 consolidated.
+Most recent: `HANDOFF_SESSION_2026_04_18_v31.md` — Step 9: synthetic FF fully removed, daily pipeline fix.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 
@@ -221,3 +228,6 @@ These have been tested extensively. Do not change without running a full 2024+20
 - Always gate artifact upload on a data count check (never overwrite with empty DB)
 - Never restore artifact without `GH_TOKEN` (silently fails)
 - `dawidd6/action-download-artifact@v6` with `if_no_artifact_found: warn` + `continue-on-error: true` is the correct pattern for optional artifacts
+
+**RULE 7 — No synthetic data, ever**
+`estimate_and_store()` is removed from all entry points. `upsert_foreign_flow()` overwrites existing rows — never call it with synthetic/estimated data. The only source of foreign flow data is real Stockbit broker_summary aggregated into foreign_flow. If a ticker has no foreign_flow data, it runs without FF signals (not with fake ones).
