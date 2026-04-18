@@ -54,6 +54,11 @@ class TechnicalAnalyzer:
         out["high_252d"] = out["high"].rolling(window=252, min_periods=60).max()
         out["dist_from_52w_high"] = (out["close"] / out["high_252d"] - 1) * 100
 
+        # Step 7 ranking features
+        out["price_vs_ma200"] = (out["close"] / out["ema_200"] - 1) * 100
+        out["atr_pct"] = out["atr"] / out["close"] * 100
+        out["prior_return_5d"] = (out["close"] / out["close"].shift(5) - 1) * 100
+
         return out
 
     def check_entry_conditions(self, row: pd.Series) -> bool:

@@ -88,6 +88,8 @@ class BacktestEngine:
         pending_entries: Dict[str, float] = {}
         cooldown_until: Dict[str, object] = {}
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
+        consecutive_losses: int = 0
+        circuit_breaker_skip: int = 0  # signal days to skip
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -190,6 +192,7 @@ class BacktestEngine:
                 pending_entries.clear()
 
             # ── 2. Check exits ──
+            trades_before_exits = len(completed_trades)
             tickers_to_exit = []
             for ticker, pos in list(portfolio.positions.items()):
                 if ticker not in current_data:
@@ -279,18 +282,38 @@ class BacktestEngine:
             for t in tickers_to_exit:
                 del portfolio.positions[t]
 
-            # ── 3. Generate entry signals ──
-            for ticker, sig_df in all_signals.items():
-                if ticker in portfolio.positions:
-                    continue
-                if sig_df is None or sig_df.empty:
-                    continue
-                if current_date not in sig_df.index:
-                    continue
+            # ── 2b. Circuit breaker: track consecutive losses ──
+            cb_threshold = self.config.entry.circuit_breaker_losses
+            if cb_threshold > 0:
+                for trade in completed_trades[trades_before_exits:]:
+                    if trade.exit_reason == "PARTIAL_PROFIT":
+                        continue
+                    if trade.pnl < 0:
+                        consecutive_losses += 1
+                        if consecutive_losses >= cb_threshold:
+                            circuit_breaker_skip = self.config.entry.circuit_breaker_pause
+                            consecutive_losses = 0
+                            logger.info(f"{current_date.date() if hasattr(current_date, 'date') else current_date}: "
+                                        f"Circuit breaker triggered — pausing entries for "
+                                        f"{self.config.entry.circuit_breaker_pause} signal days")
+                    else:
+                        consecutive_losses = 0
 
-                sig_row = sig_df.loc[current_date]
-                if sig_row.get("signal") == "BUY":
-                    pending_entries[ticker] = sig_row.get("vol_ratio", 1.0)
+            # ── 3. Generate entry signals ──
+            if circuit_breaker_skip > 0:
+                circuit_breaker_skip -= 1
+            else:
+                for ticker, sig_df in all_signals.items():
+                    if ticker in portfolio.positions:
+                        continue
+                    if sig_df is None or sig_df.empty:
+                        continue
+                    if current_date not in sig_df.index:
+                        continue
+
+                    sig_row = sig_df.loc[current_date]
+                    if sig_row.get("signal") == "BUY":
+                        pending_entries[ticker] = sig_row.get("composite_score", 0.0)
 
             # ── 4. Record equity ──
             portfolio.update_equity(current_prices)

@@ -46,6 +46,9 @@ class SignalCombiner:
         # Add broker accumulation/distribution score
         result = self._add_accumulation_signals(result, broker_df)
 
+        # Step 7: composite signal quality score for ranking
+        result = self._compute_signal_quality(result)
+
         # Add trend exit indicators (MA10 for high-performers)
         result["ma_10"] = result["close"].rolling(10, min_periods=5).mean()
 
@@ -64,7 +67,6 @@ class SignalCombiner:
         result["signal"] = result.apply(lambda row: self._evaluate_signal(row), axis=1)
 
         # Compat columns
-        result["composite_score"] = 0.0
         result["foreign_score"] = 0.0
         result["volume_price_score"] = 0.0
         result["broker_score"] = 0.0
@@ -133,6 +135,16 @@ class SignalCombiner:
         if ef.use_breakout_strength_filter:
             is_breakout = is_breakout & (breakout_strength >= ef.min_breakout_strength)
 
+        # Step 7: price_vs_ma200 hard filter — block structural downtrends
+        # Blocks >10% below 200MA: 32 trades, 16% WR, 0 big winners lost
+        if ef.use_ma200_filter and "price_vs_ma200" in df.columns:
+            is_breakout = is_breakout & (df["price_vs_ma200"] >= ef.min_price_vs_ma200)
+
+        # Step 7: atr_pct hard filter — block low-volatility stocks
+        # Blocks ATR% < 1.75%: 41 trades, 17% WR, 0 big winners lost
+        if ef.use_atr_filter and "atr_pct" in df.columns:
+            is_breakout = is_breakout & (df["atr_pct"] >= ef.min_atr_pct)
+
         df["is_breakout"] = is_breakout
 
         return df
@@ -158,6 +170,7 @@ class SignalCombiner:
             df["ff_consecutive_sell"] = 0
             df["is_foreign_driven"] = False
             df["ff_trend_positive"] = True
+            df["ksei_net_5d"] = np.nan
             return df
 
         if "net_foreign_value" in ff_df.columns:
@@ -210,6 +223,18 @@ class SignalCombiner:
         groups = (df["ff_is_sell"] != df["ff_is_sell"].shift()).cumsum()
         df["ff_consecutive_sell"] = df["ff_is_sell"].groupby(groups).cumsum()
         df.loc[~df["is_foreign_driven"], "ff_consecutive_sell"] = 0
+
+        # Step 7: KSEI 5d net flow — for hard filter on strong foreign outflow
+        df["ksei_net_5d"] = df["net_foreign"].rolling(5, min_periods=3).sum()
+
+        # Apply KSEI hard filter: block is_breakout when strong foreign outflow
+        # ksei_net_5d < -5B IDR: 50 trades blocked, 22% WR, 0 big winners lost
+        if self.config.foreign_flow.use_ksei_filter:
+            ksei_block = (
+                df["ksei_net_5d"].notna() &
+                (df["ksei_net_5d"] < self.config.foreign_flow.min_ksei_net_5d)
+            )
+            df.loc[ksei_block, "is_breakout"] = False
 
         return df
 
@@ -270,6 +295,42 @@ class SignalCombiner:
                 return "BUY"
 
         return "HOLD"
+
+    def _compute_signal_quality(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Step 7: Composite signal quality score for ranking pending entries.
+
+        Each feature is normalized to a within-ticker rolling percentile rank
+        (0-1) over the past N days, then combined with fixed weights.
+        Score of 0.5 = average. Higher = better quality breakout signal.
+
+        Features and weights (from Cohen's d analysis, 803 trades 2021-2025):
+          price_vs_ma200   0.30  (d=+0.402)
+          breakout_strength 0.20 (d=+0.266)
+          atr_pct          0.20  (d=+0.360)
+          prior_return_5d  0.15  (d=+0.358)
+          rsi              0.15  (d=+0.328)
+        """
+        rcfg = self.config.ranking
+        w = rcfg.percentile_window
+
+        feature_weights = [
+            ("price_vs_ma200",    rcfg.weight_price_vs_ma200),
+            ("breakout_strength", rcfg.weight_breakout_strength),
+            ("atr_pct",           rcfg.weight_atr_pct),
+            ("prior_return_5d",   rcfg.weight_prior_return_5d),
+            ("rsi",               rcfg.weight_rsi),
+        ]
+
+        score = pd.Series(0.0, index=df.index)
+        for col, weight in feature_weights:
+            if col not in df.columns:
+                continue
+            pct_rank = df[col].rolling(w, min_periods=10).rank(pct=True)
+            score += pct_rank.fillna(0.5) * weight
+
+        df["composite_score"] = score
+        return df
 
     def generate_signals_universe(self, universe_prices, ihsg_df,
                                    foreign_flows=None, broker_data=None):

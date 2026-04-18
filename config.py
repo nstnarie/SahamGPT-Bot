@@ -83,6 +83,11 @@ class ForeignFlowConfig:
     min_net_foreign_value: float = 0
     exit_consecutive_sell_days: int = 5
 
+    # Step 7: KSEI hard filter — block entry when strong foreign outflow
+    # ksei_net_5d < -5B IDR → 50 trades blocked, 22% WR, 0 big winners lost
+    min_ksei_net_5d: float = -5_000_000_000.0
+    use_ksei_filter: bool = True
+
 
 @dataclass
 class TechnicalConfig:
@@ -102,8 +107,16 @@ class EntryConfig:
     signal_confirmation_days: int = 1
     max_gap_down_pct: float = 0.02
     max_gap_up_pct: float = 0.07   # skip entry if stock gaps up >7% from signal close
-    max_entries_per_week: int = 10  # rolling 10-day entry limit (was 5; raised for v10 mega-winner capture)
+    max_entries_per_week: int = 6  # rolling 10-day entry limit (Step 8: 6 is sweet spot — PF 1.40/+6.4% in 2024, PF 1.75/+14.9% in 2025)
     min_big_money_score: float = 0.0
+
+    # Step 8: Circuit breaker — pause entries after consecutive losses
+    # Set to 0 to disable. After N losses in a row, skip next M signal days.
+    circuit_breaker_losses: int = 0  # disabled — see note below
+    circuit_breaker_pause: int = 0
+    # Note: CB(4,5) tested well in trade-log simulation but worsened actual
+    # backtest because skipping entries changes capital allocation cascade.
+    # The trades that get "replaced" by later entries have different outcomes.
 
 
 @dataclass
@@ -116,6 +129,34 @@ class EntryFilterConfig:
     # Enable/disable each filter independently (set False to roll back)
     use_52w_filter: bool = True
     use_breakout_strength_filter: bool = False
+
+    # Step 7: new hard filters (confirmed 0 big winners blocked)
+    # Block if stock is >10% below 200MA (structural downtrend, d=+0.402)
+    min_price_vs_ma200: float = -10.0
+    use_ma200_filter: bool = True
+    # Block if ATR% < 1.75% (insufficient volatility to generate big moves, d=+0.360)
+    min_atr_pct: float = 1.75
+    use_atr_filter: bool = True
+
+
+@dataclass
+class SignalRankingConfig:
+    """
+    Step 7: Composite signal quality score for ranking pending entries.
+
+    Replaces vol_ratio (d=0.071, useless) with a weighted combination of
+    indicators confirmed via Cohen's d analysis on 803 trades (2021-2025).
+    Higher score = higher priority entry when capital is limited.
+    """
+    # Feature weights (must sum to 1.0)
+    weight_price_vs_ma200: float = 0.30   # d=+0.402 — strongest
+    weight_breakout_strength: float = 0.20  # d=+0.266
+    weight_atr_pct: float = 0.20           # d=+0.360
+    weight_prior_return_5d: float = 0.15   # d=+0.358
+    weight_rsi: float = 0.15              # d=+0.328
+
+    # Rolling window for within-ticker percentile normalization
+    percentile_window: int = 60
 
 
 @dataclass
@@ -140,13 +181,13 @@ class ExitConfig:
     stop_loss_atr_mult: float = 1.5
     stop_loss_hard_cap: float = 0.10  # widened to 10% since we hold through early vol
 
-    # NEW: Minimum hold period — stop-loss does NOT fire during this period
-    # Data shows trades that survive 5 days have 49% win rate vs 7% for days 1-5
+    # Minimum hold period — stop-loss does NOT fire during this period
+    # Kept at 5: trades that survive 5 days have 49% WR vs 7% for days 1-5.
+    # Step 8 tested min_hold=3 but it caused 33 noise exits on day 4 (-90M).
     min_hold_days: int = 5
 
-    # NEW: Emergency stop — even during hold period, exit if loss exceeds this
-    # This prevents catastrophic damage from gap-downs during hold period
-    emergency_stop_pct: float = 0.12  # -12% = something is seriously wrong (tightened from 0.15)
+    # Emergency stop — even during hold period, exit if loss exceeds this
+    emergency_stop_pct: float = 0.12
 
     # Trailing stop
     trailing_activation_pct: float = 0.08
@@ -224,6 +265,7 @@ class FrameworkConfig:
     technical: TechnicalConfig = field(default_factory=TechnicalConfig)
     entry: EntryConfig = field(default_factory=EntryConfig)
     entry_filter: EntryFilterConfig = field(default_factory=EntryFilterConfig)
+    ranking: SignalRankingConfig = field(default_factory=SignalRankingConfig)
     sizing: PositionSizingConfig = field(default_factory=PositionSizingConfig)
     exit: ExitConfig = field(default_factory=ExitConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)

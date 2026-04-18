@@ -1,9 +1,10 @@
 """
-Portfolio Management v5
+Portfolio Management v6
 ========================
-- 5-day minimum hold before stop fires (kills 60% of noise deaths)
+- 5-day minimum hold before stop fires
 - Trend-following exit for high performers (don't sell EMTK too early)
-- Emergency stop at -15% even during hold period
+- Emergency stop at -10% even during hold period (Step 8: tightened from -12%)
+- Circuit breaker: pause entries after consecutive losses (Step 8)
 """
 
 import logging
