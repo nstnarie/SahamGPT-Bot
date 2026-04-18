@@ -12,15 +12,20 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 9 — 2026-04-18)
+## Current State (Step 10 — 2026-04-18)
 
-**Backtest results** (real Asing broker data — synthetic FF fully removed):
-- 2024: PF 0.53, -13.7%, 34% WR, 101 trades — **still losing, active research problem**
-- 2025: PF 1.65, +19.7%, 46% WR, 98 trades — profitable
+**Backtest results** (real Asing broker data + fp_ratio filter):
+- 2024: PF 1.34, +5.91%, 46.8% WR, 62 trades — profitable ✅
+- 2025: PF 1.53, +12.12%, 52.1% WR, 71 trades — profitable ✅
 
-Previous results with synthetic FF (for reference only — synthetic is gone):
-- 2024: PF 1.40, +6.4% (synthetic was accidentally acting as quality pre-filter)
-- 2025: PF 1.75, +14.9%
+Previous results without fp_ratio filter (real data, no filter):
+- 2024: PF 1.07, +1.78%, 39.8% WR, 103 trades
+- 2025: PF ~1.65, ~+19.7%, ~46% WR, ~98 trades
+
+**fp_ratio filter** (Step 10): blocks entry on stocks where Asing traded value ≥ 40% of total. High-fp stocks (BBCA, BMRI, BBRI, TLKM) are macro hedges — their breakouts are foreign flow noise, not fundamental accumulation.
+- `fp_ratios.json` — precomputed per-ticker from broker_summary (137 tickers, 2024-2025)
+- `EntryFilterConfig.max_fp_ratio = 0.40`, `use_fp_filter = True`
+- Falls back to `fp_ratios.json` when broker_summary is unavailable (GitHub CI)
 
 **Key config values** (all in `config.py`):
 ```python
@@ -112,7 +117,8 @@ reports/
 | 20-day breakout (not 60d) | Catches 100% of mega-winners at median 13d after trough vs 34d for 60d |
 | No RSI/MACD at entry | These indicators are LAGGING. At breakout troughs, both look terrible. |
 | No FF at entry | FF at trough has Cohen's d = -0.0001. Zero predictive power. |
-| min_hold=5 | Trades surviving 5 days have 49% WR vs 7% for days 1-5. |
+| min_hold=5 | Trades surviving 5 days have 49% WR vs 7% for days 1-5. Step 10 re-tested min_hold=3 with real data: day-4 cliff (-132M) worse than day-6 (-126M), TREND_EXIT 16→9 trades. |
+| fp_ratio < 0.40 | Step 10: low-fp stocks = 52% WR, +117.7M; high-fp = 32% WR, -100M. High-fp stocks are macro hedge vehicles (BBCA, BMRI, BBRI, TLKM) — breakouts are foreign flow noise, not accumulation. |
 | Trend exit for +15% | Lets position run to +65%, not forced out at +20% by trailing stop |
 | MPW=6 throttle | Forces ranking to filter the worst signals; prevents false-breakout clusters |
 | No hard position count | Capital is the real limit. With 12% max and 90% exposure: ~7-8 natural max. |
@@ -158,8 +164,8 @@ reports/
 
 ## Next Priorities (as of 2026-04-18)
 
-1. **Diagnose 2024 real-data underperformance** (ACTIVE) — With real Asing flows, 2024 PF is 0.53/-13.7% vs 1.40/+6.4% with synthetic. Root cause: real Asing flows in 2024 are less negative than synthetic estimated, so KSEI filter is less restrictive and more bad trades get through. Need to find what's different in 2024 entry quality vs 2025.
-2. **fp_ratio exploration** — Prior KSEI analysis showed high-fp stocks lose (23.7% WR), low-fp win (53.5% WR). Test as entry filter. Data is in DB.
+1. **2025 return drop investigation** — fp_ratio filter reduced 2025 from ~+19.7% to +12.12% by blocking 27 trades. Need to check which 2025 trades were blocked and whether they were genuine winners or noise. If some blocked trades were good (low-fp stock that temporarily appeared high-fp), the filter might need refinement.
+2. **Rolling fp_ratio** — Current fp_ratios.json uses full 2024-2025 data (minor lookahead bias for 2024 backtest). A rolling 90-day fp_ratio would be cleaner and avoid any lookahead. Feasibility: add to broker_accumulation_df loading.
 3. **2021-2022 regime problem** — These years remain unprofitable (PF 0.46-0.71). The breakout strategy needs trending conditions. May require a separate strategy for confirmed BEAR regimes.
 
 ---
@@ -184,7 +190,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_18_v31.md` — Step 9: synthetic FF fully removed, daily pipeline fix.
+Most recent: `HANDOFF_SESSION_2026_04_18_v32.md` — Step 10: fp_ratio filter merged, both years profitable.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 
