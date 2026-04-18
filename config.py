@@ -201,8 +201,8 @@ class ExitConfig:
     trailing_atr_mult: float = 2.0
     trailing_ema: int = 20
 
-    # Partial profit: sell 30% at +15%
-    partial_sell_fraction: float = 0.30
+    # Partial profit: sell 30% at +15% — EXP: disabled to capture full mega-winner moves
+    partial_sell_fraction: float = 0.0  # was 0.30
     partial_target_pct: float = 0.15
 
     # NEW: Trend-following exit for high-performers
