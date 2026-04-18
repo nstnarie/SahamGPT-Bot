@@ -182,9 +182,10 @@ class ExitConfig:
     stop_loss_hard_cap: float = 0.10  # widened to 10% since we hold through early vol
 
     # Minimum hold period — stop-loss does NOT fire during this period
-    # Kept at 5: trades that survive 5 days have 49% WR vs 7% for days 1-5.
-    # Step 8 tested min_hold=3 but it caused 33 noise exits on day 4 (-90M).
-    min_hold_days: int = 5
+    # EXP: min_hold=3 re-test with real Asing data (prev test was synthetic).
+    # With real data: only 4 stops on day 4 vs 33 on day 6 — hypothesis:
+    # day-6 cliff shifts earlier and is cheaper to exit at -7% vs -12%.
+    min_hold_days: int = 3
 
     # Emergency stop — even during hold period, exit if loss exceeds this
     emergency_stop_pct: float = 0.12
