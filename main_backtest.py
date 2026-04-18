@@ -132,14 +132,20 @@ def main():
     broker_accumulations: Dict[str, pd.DataFrame] = {}
     stock_sectors: Dict[str, str] = {}
 
-    # Load fp_ratios from full available broker_summary range
+    # Load fp_ratios from broker_summary; fall back to committed JSON if broker_summary is empty
     fp_ratios = load_fp_ratios(session)
+    if not fp_ratios:
+        fp_json = Path(__file__).parent / "fp_ratios.json"
+        if fp_json.exists():
+            import json
+            with open(fp_json) as f:
+                fp_ratios = json.load(f)
+            logger.info(f"fp_ratio: loaded {len(fp_ratios)} tickers from fp_ratios.json (no broker_summary available)")
+        else:
+            logger.info("No fp_ratio data (no broker_summary and no fp_ratios.json) — fp_filter disabled")
     if fp_ratios:
         fp_enabled = config.entry_filter.use_fp_filter
-        logger.info(f"Loaded fp_ratios for {len(fp_ratios)} tickers (filter {'ON' if fp_enabled else 'OFF'}, threshold < {config.entry_filter.max_fp_ratio})")
-    else:
-        fp_ratios = {}
-        logger.info("No broker_summary data for fp_ratio — fp_filter disabled")
+        logger.info(f"fp_ratio filter {'ON' if fp_enabled else 'OFF'}, threshold < {config.entry_filter.max_fp_ratio}, {len(fp_ratios)} tickers")
 
     for ticker in good_tickers:
         pdf = load_prices_as_dataframe(session, ticker, warmup_start, end_dt)
