@@ -112,7 +112,8 @@ reports/
 | Trend exit for +15% | Lets position run to +65%, not forced out at +20% by trailing stop |
 | MPW=6 throttle | Forces ranking to filter the worst signals; prevents false-breakout clusters |
 | No hard position count | Capital is the real limit. With 12% max and 90% exposure: ~7-8 natural max. |
-| Synthetic FF (not real broker) | KSEI scraping only covers 2025+. Synthetic works well enough for entry. |
+| Real Asing FF (not synthetic) | broker_summary has 2.6M rows (2024-2025, 137 tickers). Pre-aggregated into foreign_flow for fast loading. Synthetic is gone. |
+| Lean split file | idx_broker_part_a.db (4.8MB) contains pre-aggregated foreign_flow (72k rows). Workflows restore from this instead of merging 2×100MB broker_summary files. |
 
 ---
 
@@ -122,11 +123,13 @@ reports/
 |------|--------|----------|
 | Price OHLCV | Yahoo Finance (`.JK` suffix) | 2020–present |
 | IHSG index | Yahoo Finance (`^JKSE`) | 2020–present |
-| Foreign flow (synthetic) | Estimated from price/volume in DB | Whatever is scraped |
-| Broker summary (real) | Stockbit chartbit API (`--real-broker` flag) | 2025+ in DB |
-| KSEI net flow | Stockbit chartbit (fitemid=3194) | 2025-01-02 to present |
+| Foreign flow (real Asing) | Pre-aggregated from broker_summary into foreign_flow table | 2024-01-02 to present |
+| Broker summary (raw) | Stockbit chartbit API | 2024-01-02 to present (2.6M rows, 137 tickers) |
+| KSEI net flow | Stockbit chartbit (fitemid=3194) | 2024-2025 (stored in foreign_flow) |
 
-**2024 KSEI data is missing** — this is a known gap. Scraping it would improve 2024 results further (KSEI filter blocks 50 bad trades/yr with 22% WR, 0 BW lost).
+**Architecture**: `broker_summary` (raw) → aggregated into `foreign_flow` (net Asing per ticker/day). Workflows use the 4.8MB `idx_broker_part_a.db` lean file (foreign_flow only) instead of trying to commit the full 450MB broker_summary.
+
+**Note**: With real Asing data, 2024 is still losing (PF 0.53, -13.7%). The MPW=6 fix that worked on synthetic data doesn't generalize to real Asing flows. This is the active research problem.
 
 ---
 
@@ -147,10 +150,9 @@ reports/
 
 ## Next Priorities (as of 2026-04-18)
 
-1. **Scrape KSEI 2024 foreign flow data** — Stockbit chartbit API, `fitemid=3194`, date range 2024-01-01 to 2024-12-31. Store in `foreign_flow` table. Expected: further improve 2024 by blocking ~50 more bad trades.
+1. **Diagnose 2024 real-data underperformance** (ACTIVE) — With real Asing flows, 2024 PF is 0.53/-13.7% vs 1.40/+6.4% with synthetic. Root cause: real Asing flows in 2024 are less negative than synthetic estimated, so KSEI filter is less restrictive and more bad trades get through. Need to find what's different in 2024 entry quality vs 2025.
 2. **fp_ratio exploration** — Prior KSEI analysis showed high-fp stocks lose (23.7% WR), low-fp win (53.5% WR). Test as entry filter. Data is in DB.
-3. **Real broker data backtest** — Run `--real-broker` for 2024+2025 to see if Asing accumulation signals improve results.
-4. **2021-2022 regime problem** — These years remain unprofitable (PF 0.46-0.71). The breakout strategy needs trending conditions. May require a separate strategy for confirmed BEAR regimes.
+3. **2021-2022 regime problem** — These years remain unprofitable (PF 0.46-0.71). The breakout strategy needs trending conditions. May require a separate strategy for confirmed BEAR regimes.
 
 ---
 
