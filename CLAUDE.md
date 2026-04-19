@@ -12,16 +12,16 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 11 — 2026-04-19)
+## Current State (Step 12 — 2026-04-19)
 
-**Backtest results** (real Asing broker data, all three entry filters active):
+**Backtest results** (real Asing broker data, all filters + pyramiding active):
 
 | Year | Return | PF | WR | Trades | Max DD | Source |
 |------|--------|----|----|--------|--------|--------|
-| 2024 | +13.05% | 2.05 | 50.0% | 46 | -4.96% | Local (real broker data) ✅ |
-| 2025 | +18.29% | 2.44 | 59.6% | 52 | -4.29% | Local (real broker data) ✅ |
-| 2024 CI | +6.54% | 1.42 | — | 59 | — | GitHub CI (no broker DB) ✅ |
-| 2025 CI | +16.11% | 1.99 | — | 63 | — | GitHub CI (no broker DB) ✅ |
+| 2024 | +14.40% | 2.06 | 50.0% | 46 | -6.58% | Local (real broker data) ✅ |
+| 2025 | +39.53% | 4.07 | 59.6% | 52 | -7.46% | Local (real broker data) ✅ |
+| 2024 CI | pending | — | — | — | — | GitHub CI (no broker DB) |
+| 2025 CI | pending | — | — | — | — | GitHub CI (no broker DB) |
 
 IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
@@ -29,6 +29,13 @@ IHSG 2024: -3.33% | IHSG 2025: +20.71%
 1. **fp_ratio < 0.40** (Step 10): blocks high-fp stocks (BBCA, BMRI, BBRI, TLKM). Falls back to `fp_ratios.json` in CI.
 2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
 3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. BS-/TBA- quadrant has 0 direct BW in 2024+2025. No-op in CI (TBA=0 when broker DB absent).
+
+**Pyramiding** (Step 12, `PyramidConfig`):
+- Adds to positions already in trend mode (+15%) on new breakout signals
+- Max 2 adds per position, each 50% of original size
+- Stop ratchets up after each add to protect new capital
+- 61% of big winners fire additional breakout signals during hold
+- Key drivers: INET +107% (145M), RAJA +35% (50M), JARR +50% (59M)
 
 **Key config values** (all in `config.py`):
 ```python
@@ -46,6 +53,10 @@ emergency_stop_pct = 0.12     # -12% emergency (fires even during hold)
 min_breakout_strength = -8.0  # Block extreme gap-downs at entry
 use_breakout_strength_filter = True
 use_combined_bs_tba_filter = True  # Block BS-/TBA- quadrant
+# Pyramiding
+enable_pyramiding = True
+max_adds = 2
+add_size_fraction = 0.50
 ```
 
 ---
@@ -178,8 +189,8 @@ reports/
 
 ## Next Priorities (as of 2026-04-19)
 
-1. **Exit improvements** — Entry side is now clean (3 validated filters). Exit logic is next lever. Key questions: Are there systematic patterns in how losers exit that can be tightened? Do certain exit types (TIME_EXIT, TREND_EXIT) underperform?
-2. **2021-2023 validation** — Current filters validated on 2024 (bear) and 2025 (bull). Need to check if BS/TBA filter holds in 2021-2023 regimes before considering it truly structural.
+1. **2021-2023 validation** (Step 3) — Current filters + pyramiding validated on 2024 (bear) and 2025 (bull). Need to verify performance in 2021-2023 regimes before treating the system as structurally proven.
+2. **CI backtest** — Trigger GitHub Actions to see CI numbers with pyramiding (no broker DB — pyramid still fires on price-based breakouts, but BS/TBA filter is no-op).
 3. **Rolling fp_ratio** — Current fp_ratios.json uses full 2024-2025 data (minor lookahead bias for 2024 backtest). A rolling 90-day fp_ratio would be cleaner.
 
 ---
@@ -204,7 +215,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_19_v33.md` — Step 11: BS/TBA combined filter merged. Local PF 2.05/2.44, returns +13.05%/+18.29%.
+Most recent: `HANDOFF_SESSION_2026_04_19_v34.md` — Step 12: pyramiding merged. Local returns +14.40%/+39.53%, PF 2.06/4.07.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 
