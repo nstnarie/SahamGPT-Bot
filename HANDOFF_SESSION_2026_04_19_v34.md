@@ -77,11 +77,21 @@ Same as v33 — no new locked parameters this session.
 
 ## Next Steps
 
-1. **Step 3: 2021-2023 validation** — Run backtests on 2021, 2022, 2023 to check if filters + pyramiding hold in older regimes. These years were previously unprofitable (PF 0.46-0.71). Expected: still unprofitable since BEAR regimes have exposure_mult=0, but pyramiding shouldn't worsen them.
+### ⚠️ MANDATORY (do before trusting live signals)
 
-2. **CI backtest** — Trigger `analyze_trade_log.yml` workflow for 2024 and 2025 to get GitHub CI numbers with pyramiding.
+**Pre-compute `top_broker_acc` daily CSV**
 
-3. **Daily signal check** — Pyramiding now applies to live signals in `main_daily.py` as well (engine is shared). Verify the daily signal output handles pyramiding gracefully when a position is already held.
+The daily signal runs on GitHub (cron 16:35 WIB) with no access to `idx_swing_trader.db`. This means `top_broker_acc = 0` for all tickers in live signals, making the BS/TBA combined filter a no-op. BS-/TBA- losers (~19% WR, 0 BW) currently pass through to Telegram unfiltered.
+
+Fix: pre-compute `top_broker_acc` per ticker per day → `broker_acc_daily.csv` → commit to repo → engine loads as fallback.
+
+Pattern to follow: `fp_ratios.json` + `EntryFilterConfig.use_fp_filter` fallback in `backtest/engine.py`.
+Files: `database/data_loader.py` (pre-compute), `backtest/engine.py` (load fallback), `signals/signal_combiner.py` (inject).
+
+### Optional
+
+1. **2021-2023 validation** — Backtest on older regimes to verify filters + pyramiding don't worsen unprofitable years.
+2. **Rolling fp_ratio** — Eliminate minor lookahead bias in `fp_ratios.json`.
 
 ---
 

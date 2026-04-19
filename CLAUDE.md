@@ -189,9 +189,25 @@ reports/
 
 ## Next Priorities (as of 2026-04-19)
 
-1. **2021-2023 validation** (Step 3) — Current filters + pyramiding validated on 2024 (bear) and 2025 (bull). Need to verify performance in 2021-2023 regimes before treating the system as structurally proven.
-2. **CI backtest** — Trigger GitHub Actions to see CI numbers with pyramiding (no broker DB — pyramid still fires on price-based breakouts, but BS/TBA filter is no-op).
-3. **Rolling fp_ratio** — Current fp_ratios.json uses full 2024-2025 data (minor lookahead bias for 2024 backtest). A rolling 90-day fp_ratio would be cleaner.
+### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
+
+**Problem**: Daily signal runs on GitHub with no access to `idx_swing_trader.db`. Result:
+- `top_broker_acc = 0` for all tickers → BS/TBA combined filter is a **no-op in live signals**
+- BS-/TBA- losers (~19% WR, 0 BW) pass through unfiltered to Telegram
+- Live signal quality is lower than what the local backtest shows
+
+**Fix**: Pre-compute `top_broker_acc` per ticker per day from local DB → save as `broker_acc_daily.csv` → commit to repo. Engine loads it as fallback when broker DB absent (same pattern as `fp_ratios.json`).
+
+**Files to touch**: `database/data_loader.py` (pre-compute script), `backtest/engine.py` (load CSV fallback), `signals/signal_combiner.py` (inject into sig_df).
+
+**Do this before trusting live Telegram signals.**
+
+---
+
+### Research / Optional
+
+1. **2021-2023 validation** — Run backtests on 2021, 2022, 2023 to verify filters + pyramiding don't worsen already-unprofitable regimes.
+2. **Rolling fp_ratio** — Current `fp_ratios.json` uses full 2024-2025 data (minor lookahead bias for 2024 backtest).
 
 ---
 
