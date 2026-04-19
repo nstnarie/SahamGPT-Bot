@@ -375,14 +375,55 @@ class BacktestEngine:
                 circuit_breaker_skip -= 1
             else:
                 for ticker, sig_df in all_signals.items():
-                    if ticker in portfolio.positions:
-                        continue
                     if sig_df is None or sig_df.empty:
                         continue
                     if current_date not in sig_df.index:
                         continue
 
                     sig_row = sig_df.loc[current_date]
+
+                    # Pyramiding (Step 12): if already held and in trend mode,
+                    # add to the position on a new breakout signal.
+                    pcfg = self.config.pyramid
+                    if ticker in portfolio.positions and pcfg.enable_pyramiding:
+                        pos = portfolio.positions[ticker]
+                        if (pos.in_trend_mode
+                                and pos.pyramid_count < pcfg.max_adds
+                                and sig_row.get("is_breakout", False)):
+                            # Execute pyramid add immediately (same-day signal → same-day add)
+                            add_open = current_data.get(ticker, {}).get("open",
+                                current_data.get(ticker, {}).get("close", 0))
+                            if add_open > 0:
+                                add_atr = sig_row.get("atr", pos.entry_atr) or pos.entry_atr
+                                # Size = fraction of original initial allocation
+                                add_shares = round_to_lot(
+                                    int(pos.shares * pcfg.add_size_fraction)
+                                )
+                                if add_shares >= 100:
+                                    add_buy = compute_buy_cost(add_open, add_shares)
+                                    if add_buy["total_cost"] <= portfolio.cash:
+                                        portfolio.cash -= add_buy["total_cost"]
+                                        pos.remaining_shares += add_shares
+                                        pos.shares += add_shares
+                                        pos.total_cost += add_buy["total_cost"]
+                                        pos.pyramid_count += 1
+                                        pos.pyramid_shares += add_shares
+                                        pos.pyramid_cost += add_buy["total_cost"]
+                                        # Raise stop to protect new capital
+                                        new_stop = add_buy["exec_price"] * (
+                                            1 - self.config.exit.stop_loss_pct
+                                        )
+                                        pos.stop_price = max(pos.stop_price, new_stop)
+                                        logger.info(
+                                            f"PYRAMID add: {ticker} x{add_shares} "
+                                            f"@ {add_open:.0f} (add #{pos.pyramid_count}), "
+                                            f"stop raised to {pos.stop_price:.0f}"
+                                        )
+                        continue  # don't add to pending_entries for held tickers
+
+                    if ticker in portfolio.positions:
+                        continue
+
                     if sig_row.get("signal") == "BUY":
                         pending_entries[ticker] = sig_row.get("composite_score", 0.0)
 

@@ -37,6 +37,10 @@ class Position:
     in_trend_mode: bool = False
     # Entry-time signal features for post-trade analysis
     entry_signal_features: dict = field(default_factory=dict)
+    # Pyramiding: track add-on entries
+    pyramid_count: int = 0             # number of add-ons executed so far
+    pyramid_shares: int = 0            # total additional shares from pyramids
+    pyramid_cost: float = 0.0          # total cost of pyramid adds
 
 
 @dataclass

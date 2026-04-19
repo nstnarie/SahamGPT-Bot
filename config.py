@@ -274,6 +274,26 @@ class BigMoneyConfig:
 
 
 @dataclass
+class PyramidConfig:
+    """
+    Position pyramiding: add to winners when they break new resistance.
+
+    Only fires when:
+      1. Position is already in trend mode (profit >= +15%)
+      2. A new breakout signal fires for the held ticker
+      3. Maximum pyramid count not yet reached
+
+    Analysis (Step 12): 61% of big winners fire additional breakout signals
+    during the hold period. First add typically appears at +20-57% from entry.
+    Simulation: ~+27M IDR theoretical upside across 2024+2025.
+    """
+    enable_pyramiding: bool = True
+    max_adds: int = 2                  # max add-ons per position (initial + 2 adds)
+    add_size_fraction: float = 0.50    # each add = 50% of original position size
+    min_profit_to_add: float = 0.15    # must be +15% (trend mode) before adding
+
+
+@dataclass
 class FrameworkConfig:
     universe: UniverseConfig = field(default_factory=UniverseConfig)
     regime: MarketRegimeConfig = field(default_factory=MarketRegimeConfig)
@@ -288,6 +308,7 @@ class FrameworkConfig:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
     big_money: BigMoneyConfig = field(default_factory=BigMoneyConfig)
+    pyramid: PyramidConfig = field(default_factory=PyramidConfig)
 
 
 DEFAULT_CONFIG = FrameworkConfig()
