@@ -12,14 +12,14 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 12 — 2026-04-19)
+## Current State (Step 13 — 2026-04-19)
 
 **Backtest results** (real Asing broker data, all filters + pyramiding active):
 
 | Year | Return | PF | WR | Trades | Max DD | Source |
 |------|--------|----|----|--------|--------|--------|
-| 2024 | +14.40% | 2.06 | 50.0% | 46 | -6.58% | Local (real broker data) ✅ |
-| 2025 | +39.53% | 4.07 | 59.6% | 52 | -7.46% | Local (real broker data) ✅ |
+| 2024 | +17.77% | 2.32 | 47.8% | 46 | -6.70% | Local (real broker data) ✅ |
+| 2025 | +40.97% | 4.18 | 59.6% | 52 | -7.44% | Local (real broker data) ✅ |
 | 2024 CI | pending | — | — | — | — | GitHub CI (no broker DB) |
 | 2025 CI | pending | — | — | — | — | GitHub CI (no broker DB) |
 
@@ -30,11 +30,12 @@ IHSG 2024: -3.33% | IHSG 2025: +20.71%
 2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
 3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. BS-/TBA- quadrant has 0 direct BW in 2024+2025. No-op in CI (TBA=0 when broker DB absent).
 
-**Pyramiding** (Step 12, `PyramidConfig`):
-- Adds to positions already in trend mode (+15%) on new breakout signals
+**Pyramiding** (Steps 12-13, `PyramidConfig`):
+- Adds to positions already in trend mode (+15%)
+- Trigger: new breakout signal (volume-confirmed) OR new 20-day high (Step 13, no vol req)
 - Max 2 adds per position, each 50% of original size
 - Stop ratchets up after each add to protect new capital
-- 61% of big winners fire additional breakout signals during hold
+- Step 13 rationale: grinders like PTRO (+42%, 40d, 2024) never triggered vol-based adds
 - Key drivers: INET +107% (145M), RAJA +35% (50M), JARR +50% (59M)
 
 **Key config values** (all in `config.py`):
@@ -57,6 +58,7 @@ use_combined_bs_tba_filter = True  # Block BS-/TBA- quadrant
 enable_pyramiding = True
 max_adds = 2
 add_size_fraction = 0.50
+use_new_high_trigger = True   # Step 13: pyramid on new 20d high (no vol req)
 ```
 
 ---
