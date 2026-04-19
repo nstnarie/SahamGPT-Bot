@@ -12,20 +12,23 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 10 — 2026-04-18)
+## Current State (Step 11 — 2026-04-19)
 
-**Backtest results** (real Asing broker data + fp_ratio filter):
-- 2024: PF 1.34, +5.91%, 46.8% WR, 62 trades — profitable ✅
-- 2025: PF 1.53, +12.12%, 52.1% WR, 71 trades — profitable ✅
+**Backtest results** (real Asing broker data, all three entry filters active):
 
-Previous results without fp_ratio filter (real data, no filter):
-- 2024: PF 1.07, +1.78%, 39.8% WR, 103 trades
-- 2025: PF ~1.65, ~+19.7%, ~46% WR, ~98 trades
+| Year | Return | PF | WR | Trades | Max DD | Source |
+|------|--------|----|----|--------|--------|--------|
+| 2024 | +13.05% | 2.05 | 50.0% | 46 | -4.96% | Local (real broker data) ✅ |
+| 2025 | +18.29% | 2.44 | 59.6% | 52 | -4.29% | Local (real broker data) ✅ |
+| 2024 CI | +6.54% | 1.42 | — | 59 | — | GitHub CI (no broker DB) ✅ |
+| 2025 CI | +16.11% | 1.99 | — | 63 | — | GitHub CI (no broker DB) ✅ |
 
-**fp_ratio filter** (Step 10): blocks entry on stocks where Asing traded value ≥ 40% of total. High-fp stocks (BBCA, BMRI, BBRI, TLKM) are macro hedges — their breakouts are foreign flow noise, not fundamental accumulation.
-- `fp_ratios.json` — precomputed per-ticker from broker_summary (137 tickers, 2024-2025)
-- `EntryFilterConfig.max_fp_ratio = 0.40`, `use_fp_filter = True`
-- Falls back to `fp_ratios.json` when broker_summary is unavailable (GitHub CI)
+IHSG 2024: -3.33% | IHSG 2025: +20.71%
+
+**Three active entry filters** (all in `EntryFilterConfig`):
+1. **fp_ratio < 0.40** (Step 10): blocks high-fp stocks (BBCA, BMRI, BBRI, TLKM). Falls back to `fp_ratios.json` in CI.
+2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
+3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. BS-/TBA- quadrant has 0 direct BW in 2024+2025. No-op in CI (TBA=0 when broker DB absent).
 
 **Key config values** (all in `config.py`):
 ```python
@@ -39,6 +42,10 @@ trend_exit_ma = 10            # Exit when close < MA10 in trend mode
 partial_sell_fraction = 0.30  # Sell 30% at +15%
 stop_loss_pct = 0.07          # -7% base stop
 emergency_stop_pct = 0.12     # -12% emergency (fires even during hold)
+# Entry filters
+min_breakout_strength = -8.0  # Block extreme gap-downs at entry
+use_breakout_strength_filter = True
+use_combined_bs_tba_filter = True  # Block BS-/TBA- quadrant
 ```
 
 ---
@@ -107,6 +114,10 @@ reports/
 | ATR% > 5% filter | Remove low-vol stocks | Blocks INET +80%, JARR +51%, ENRG +36%, DSNG +75% |
 | IHSG momentum filters | Block entries in weak market | 2024 rallies fake, 2025 real — doesn't generalize |
 | close > MA50 entry | Confirm uptrend | 68% of mega-winners have bearish MA alignment at trough |
+| SIDEWAYS mult = 1.0 | Allow more exposure in sideways | PF 1.34→1.14, DD doubled to -12.54% (2024) |
+| partial_sell = 0.0 | Let winners run longer | Big winners 14→8, WR -7pts both years |
+| breakout_strength >= 0 filter | Only enter above breakout | Blocks 50% of big winners (gap-down recovery trades) |
+| Composite score recalibration | Fix broken Q5 ranking | Zero effect — MPW=6 throttle never binds (max 4 signals/day) |
 
 ---
 
@@ -119,6 +130,9 @@ reports/
 | No FF at entry | FF at trough has Cohen's d = -0.0001. Zero predictive power. |
 | min_hold=5 | Trades surviving 5 days have 49% WR vs 7% for days 1-5. Step 10 re-tested min_hold=3 with real data: day-4 cliff (-132M) worse than day-6 (-126M), TREND_EXIT 16→9 trades. |
 | fp_ratio < 0.40 | Step 10: low-fp stocks = 52% WR, +117.7M; high-fp = 32% WR, -100M. High-fp stocks are macro hedge vehicles (BBCA, BMRI, BBRI, TLKM) — breakouts are foreign flow noise, not accumulation. |
+| BS >= -8% at entry | Step 11: quick failures average BS=-3.1% to -4.8% (enter below breakout). -8% threshold blocks extreme gap-downs (4 trades/year, 0 BW lost directly). |
+| Block BS-/TBA- quadrant | Step 11: when breakout faded (BS<0) AND big money selling (TBA<0), 0 BW in either year. 11+9 trades blocked, all losers directly. No-op in CI. |
+| Composite score is no-op | Step 11: MPW=6 throttle never binds — max 4 signals/day observed. Ranking order is irrelevant. Do not tune weights. |
 | Trend exit for +15% | Lets position run to +65%, not forced out at +20% by trailing stop |
 | MPW=6 throttle | Forces ranking to filter the worst signals; prevents false-breakout clusters |
 | No hard position count | Capital is the real limit. With 12% max and 90% exposure: ~7-8 natural max. |
@@ -162,11 +176,11 @@ reports/
 
 ---
 
-## Next Priorities (as of 2026-04-18)
+## Next Priorities (as of 2026-04-19)
 
-1. **2025 return drop investigation** — fp_ratio filter reduced 2025 from ~+19.7% to +12.12% by blocking 27 trades. Need to check which 2025 trades were blocked and whether they were genuine winners or noise. If some blocked trades were good (low-fp stock that temporarily appeared high-fp), the filter might need refinement.
-2. **Rolling fp_ratio** — Current fp_ratios.json uses full 2024-2025 data (minor lookahead bias for 2024 backtest). A rolling 90-day fp_ratio would be cleaner and avoid any lookahead. Feasibility: add to broker_accumulation_df loading.
-3. **2021-2022 regime problem** — These years remain unprofitable (PF 0.46-0.71). The breakout strategy needs trending conditions. May require a separate strategy for confirmed BEAR regimes.
+1. **Exit improvements** — Entry side is now clean (3 validated filters). Exit logic is next lever. Key questions: Are there systematic patterns in how losers exit that can be tightened? Do certain exit types (TIME_EXIT, TREND_EXIT) underperform?
+2. **2021-2023 validation** — Current filters validated on 2024 (bear) and 2025 (bull). Need to check if BS/TBA filter holds in 2021-2023 regimes before considering it truly structural.
+3. **Rolling fp_ratio** — Current fp_ratios.json uses full 2024-2025 data (minor lookahead bias for 2024 backtest). A rolling 90-day fp_ratio would be cleaner.
 
 ---
 
@@ -190,7 +204,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_18_v32.md` — Step 10: fp_ratio filter merged, both years profitable.
+Most recent: `HANDOFF_SESSION_2026_04_19_v33.md` — Step 11: BS/TBA combined filter merged. Local PF 2.05/2.44, returns +13.05%/+18.29%.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 
