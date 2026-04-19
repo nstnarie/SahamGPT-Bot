@@ -291,6 +291,9 @@ class PyramidConfig:
     max_adds: int = 2                  # max add-ons per position (initial + 2 adds)
     add_size_fraction: float = 0.50    # each add = 50% of original position size
     min_profit_to_add: float = 0.15    # must be +15% (trend mode) before adding
+    use_new_high_trigger: bool = True  # Step 13: also pyramid on new 20d high (no vol req)
+                                       # Catches slow grinders (PTRO +42% 2024: 0 adds
+                                       # despite 40d hold — no volume spike ever fired)
 
 
 @dataclass

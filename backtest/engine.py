@@ -57,6 +57,17 @@ class Trade:
     entry_exposure_mult: float = float("nan")
 
 
+def _is_new_high(sig_row) -> bool:
+    """Check if close exceeds prior 20-day high (pyramid-only trigger, no volume req).
+
+    Used for Step 13 pyramid improvement: catches slow grinders (e.g., PTRO 2024 +42%,
+    40-day hold) that never fire a volume-confirmed breakout during the hold period.
+    """
+    close = sig_row.get("close", 0)
+    high_nd = sig_row.get("high_Nd", 0)
+    return close > 0 and high_nd > 0 and close > high_nd
+
+
 class BacktestEngine:
 
     def __init__(self, config: FrameworkConfig = DEFAULT_CONFIG):
@@ -389,7 +400,9 @@ class BacktestEngine:
                         pos = portfolio.positions[ticker]
                         if (pos.in_trend_mode
                                 and pos.pyramid_count < pcfg.max_adds
-                                and sig_row.get("is_breakout", False)):
+                                and (sig_row.get("is_breakout", False)
+                                     or (pcfg.use_new_high_trigger
+                                         and _is_new_high(sig_row)))):
                             # Execute pyramid add immediately (same-day signal → same-day add)
                             add_open = current_data.get(ticker, {}).get("open",
                                 current_data.get(ticker, {}).get("close", 0))
