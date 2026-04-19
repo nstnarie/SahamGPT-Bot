@@ -149,6 +149,12 @@ class EntryFilterConfig:
     max_fp_ratio: float = 0.40
     use_fp_filter: bool = True
 
+    # Combined BS/TBA filter (Step 11): block when breakout faded AND big money selling.
+    # BS-/TBA- quadrant: 0 big winners in 2024+2025, ~19% WR, ~10 quick failures.
+    # PF improvement: 1.49→2.48 (2024), 2.00→2.54 (2025) — blocks 11+9 trades, 0 BW lost.
+    # No-op in CI (top_broker_acc=0 when broker DB absent → tba<0 never fires).
+    use_combined_bs_tba_filter: bool = True
+
 
 @dataclass
 class SignalRankingConfig:

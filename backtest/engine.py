@@ -177,6 +177,17 @@ class BacktestEngine:
                             if not math.isnan(bs) and bs < ef.min_breakout_strength:
                                 continue
 
+                        # Combined BS/TBA filter (Step 11):
+                        # Block when breakout faded (BS<0) AND big money selling (TBA<0).
+                        # BS-/TBA- quadrant: 0 big winners across 2024+2025.
+                        # No-op in CI: top_broker_acc defaults to 0 → tba<0 never fires.
+                        if ef.use_combined_bs_tba_filter and sig_df is not None and current_date in sig_df.index:
+                            sig_row = sig_df.loc[current_date]
+                            bs = sig_row.get("breakout_strength", float("nan"))
+                            tba = sig_row.get("top_broker_acc", 0)
+                            if not math.isnan(bs) and bs < 0 and tba < 0:
+                                continue
+
                         atr = 0.0
                         if sig_df is not None and current_date in sig_df.index:
                             atr = sig_df.loc[current_date].get("atr", 0)
