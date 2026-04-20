@@ -128,6 +128,28 @@ backtest/engine.py:
   Returns (equity_curve, trade_log, metrics, signal_funnel_df)
 ```
 
+## 2023 Broker Summary Scrape (in progress)
+
+**Confirmed**: Stockbit HAS 2023 data — BBRI Q4 2023 test returned 3,711 records.
+
+**Plan**: 4 quarters × 4 batches = 16 sequential runs. One quarter per run (25 tickers) to stay under GitHub 6-hour limit.
+
+| | Batch 1 | Batch 2 | Batch 3 | Batch 4 |
+|--|---------|---------|---------|---------|
+| Q1 (Jan-Mar) | 🔄 running (run 24644173063) | ⏳ | ⏳ | ⏳ |
+| Q2 (Apr-Jun) | ⏳ | ⏳ | ⏳ | ⏳ |
+| Q3 (Jul-Sep) | ⏳ | ⏳ | ⏳ | ⏳ |
+| Q4 (Oct-Dec) | ⏳ | ⏳ | ⏳ | ⏳ |
+
+Trigger template:
+```bash
+gh workflow run scrape_broker_summary.yml \
+  --field start_date="2023-QQ-DD" \
+  --field end_date="2023-QQ-DD" \
+  --field batch="N" \
+  --field tickers=""
+```
+
 ## Mandatory Pending (from Step 13)
 
 **Pre-compute `broker_acc_daily.csv`** — BS/TBA filter is no-op in live GitHub signals because no broker DB is available. Daily Telegram signals may include BS-/TBA- losers (~19% WR). Fix by pre-computing top_broker_acc per ticker per day from local DB → commit CSV → engine loads as fallback (same pattern as fp_ratios.json).

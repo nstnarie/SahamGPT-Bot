@@ -161,7 +161,7 @@ reports/
 | Price OHLCV | Yahoo Finance (`.JK` suffix) | 2020–present |
 | IHSG index | Yahoo Finance (`^JKSE`) | 2020–present |
 | Foreign flow (real Asing) | Pre-aggregated from broker_summary into foreign_flow table | 2024-01-02 to present |
-| Broker summary (raw) | Stockbit chartbit API | 2024-01-02 to present (2.6M rows, 137 tickers) |
+| Broker summary (raw) | Stockbit chartbit API | 2023-01-01 to present (2.6M rows 2024-2025 + 2023 scrape in progress, 137 tickers) |
 | KSEI net flow | Stockbit chartbit (fitemid=3194) | 2024-2025 (stored in foreign_flow) |
 
 **Architecture**: `broker_summary` (raw Stockbit data) → aggregated into `foreign_flow` (net Asing per ticker/day) → used by backtest and daily signals.
@@ -189,7 +189,7 @@ reports/
 
 ---
 
-## Next Priorities (as of 2026-04-19)
+## Next Priorities (as of 2026-04-20)
 
 ### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
 
@@ -206,9 +206,45 @@ reports/
 
 ---
 
+### Step 15: Raise volume_spike_max and fp_ratio threshold (pending experiments)
+
+**Root cause found (Step 14 signal funnel analysis)**: 49/66 mega winners in 2024 never generate a signal. Two filters are over-blocking:
+
+1. **`volume_spike_max = 5.0`** — blocks 41/66 mega winners. Mega winner trough breakouts ARE high-volume (TINS=11.5x, NIKL=12.6x, JARR=13.7x). The pump-and-dump cap is too conservative.
+   - Experiment: raise to `10.0`
+   - File: `config.py:BreakoutConfig.volume_spike_max`
+
+2. **`fp_ratio >= 0.40`** — blocks 36/66 mega winners. Real hedge vehicles have fp > 0.70 (BBCA=0.82, BMRI=0.78). Threshold over-fires on legitimate mega winners (TPIA+250% fp=0.525, BREN+182% fp=0.549, BRIS+96% fp=0.462).
+   - Experiment: raise to `0.55`
+   - File: `config.py:EntryFilterConfig.max_fp_ratio`
+
+**TINS case confirmed**: March 8 2024 breakout was 11.5x volume (user was right). Blocked by vol_too_high (>5x) AND fp_ratio (0.403). Had 12 near-breakout days, ALL blocked.
+
+Run both 2024 + 2025 for each experiment. Accept only if both improve or one improves / other neutral.
+
+---
+
+### 2023 Broker Summary Scrape (in progress)
+
+**Confirmed**: Stockbit has 2023 data (BBRI Q4 2023 test = 3,711 records).
+**Plan**: 4 quarters × 4 batches = 16 sequential runs (one quarter at a time, batch=25 tickers, to stay under 6h GitHub limit).
+**Status**: Batch 1 Q1 2023 running (run 24644173063). Continue sequentially until all 16 runs complete.
+**Purpose**: Enables 2023 backtest validation — verify filters + pyramiding don't worsen pre-2024 regimes.
+
+```bash
+# Template for triggering next run:
+gh workflow run scrape_broker_summary.yml \
+  --field start_date="2023-01-01" \
+  --field end_date="2023-03-31" \
+  --field batch="2" \
+  --field tickers=""
+```
+
+---
+
 ### Research / Optional
 
-1. **2021-2023 validation** — Run backtests on 2021, 2022, 2023 to verify filters + pyramiding don't worsen already-unprofitable regimes.
+1. **2021-2023 validation** — Run backtests after 2023 broker data scrape is complete.
 2. **Rolling fp_ratio** — Current `fp_ratios.json` uses full 2024-2025 data (minor lookahead bias for 2024 backtest).
 
 ---
