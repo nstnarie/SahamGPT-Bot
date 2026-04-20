@@ -174,7 +174,7 @@ def main():
     # Run backtest
     logger.info("Running backtest...")
     bt = BacktestEngine(config)
-    equity_curve, trade_log, metrics = bt.run(
+    equity_curve, trade_log, metrics, signal_funnel = bt.run(
         universe_prices=universe_prices,
         ihsg_df=ihsg_df,
         foreign_flows=foreign_flows,
@@ -192,6 +192,14 @@ def main():
 
     generate_all_reports(equity_curve, trade_log, metrics,
                          benchmark_curve, args.output)
+
+    # Step 14: save signal funnel diagnostic
+    if not signal_funnel.empty:
+        funnel_path = f"{args.output}/signal_funnel.csv"
+        signal_funnel.to_csv(funnel_path, index=False)
+        logger.info(f"Signal funnel saved to {funnel_path}")
+        fate_summary = signal_funnel["fate"].value_counts().to_dict()
+        logger.info(f"Signal funnel summary: {fate_summary}")
 
     print("\n" + format_metrics_report(metrics))
     print(f"\nReports saved to: {args.output}/")

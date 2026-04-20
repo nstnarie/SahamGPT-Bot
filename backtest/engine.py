@@ -119,6 +119,7 @@ class BacktestEngine:
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
         consecutive_losses: int = 0
         circuit_breaker_skip: int = 0  # signal days to skip
+        signal_funnel: List[dict] = []  # Step 14: track every BUY signal and its fate
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -145,15 +146,30 @@ class BacktestEngine:
                 recent_count = sum(1 for d in recent_entry_dates if d >= recent_cutoff_date)
                 max_week = self.config.entry.max_entries_per_week
                 if recent_count >= max_week:
+                    # Step 14: mark all queued signals as throttle-dropped
+                    for _tk in list(pending_entries.keys()):
+                        for _rec in reversed(signal_funnel):
+                            if _rec["ticker"] == _tk and _rec["fate"] == "queued":
+                                _rec["fate"] = "throttle"
+                                break
                     pending_entries.clear()
                     continue
 
+                # Step 14: helper to update signal funnel fate for a ticker
+                def _set_fate(tk, fate):
+                    for _r in reversed(signal_funnel):
+                        if _r["ticker"] == tk and _r["fate"] == "queued":
+                            _r["fate"] = fate
+                            return
+
                 for ticker, signal_score in sorted_entries:
                     if entries_today >= max_entries:
-                        break
+                        _set_fate(ticker, "max_daily")
+                        continue
 
                     # Cooldown check
                     if ticker in cooldown_until and current_date < cooldown_until[ticker]:
+                        _set_fate(ticker, "cooldown")
                         continue
 
                     if ticker in current_data and ticker not in portfolio.positions:
@@ -169,11 +185,13 @@ class BacktestEngine:
                                 if prev_close > 0:
                                     gap_pct = (open_price - prev_close) / prev_close
                                     if gap_pct < -self.config.entry.max_gap_down_pct:
+                                        _set_fate(ticker, "gap_down")
                                         continue
                                     # Gap-up rejection: stock gapped up >7% at open
                                     # means we're entering at euphoric prices after
                                     # signal fired — high rejection risk (e.g. EMTK Oct 2)
                                     if gap_pct > self.config.entry.max_gap_up_pct:
+                                        _set_fate(ticker, "gap_up")
                                         continue
 
                         sig_df = all_signals.get(ticker)
@@ -186,6 +204,7 @@ class BacktestEngine:
                         if ef.use_breakout_strength_filter and sig_df is not None and current_date in sig_df.index:
                             bs = sig_df.loc[current_date].get("breakout_strength", float("nan"))
                             if not math.isnan(bs) and bs < ef.min_breakout_strength:
+                                _set_fate(ticker, "bs_filter")
                                 continue
 
                         # Combined BS/TBA filter (Step 11):
@@ -197,6 +216,7 @@ class BacktestEngine:
                             bs = sig_row.get("breakout_strength", float("nan"))
                             tba = sig_row.get("top_broker_acc", 0)
                             if not math.isnan(bs) and bs < 0 and tba < 0:
+                                _set_fate(ticker, "bs_tba_filter")
                                 continue
 
                         atr = 0.0
@@ -253,6 +273,13 @@ class BacktestEngine:
                                 portfolio.cash -= buy["total_cost"]
                                 entries_today += 1
                                 recent_entry_dates.append(current_date)
+                                _set_fate(ticker, "executed")
+                            else:
+                                _set_fate(ticker, "no_cash")
+                        else:
+                            _set_fate(ticker, "size_too_small")
+                    elif ticker in portfolio.positions:
+                        _set_fate(ticker, "already_held")
 
                 pending_entries.clear()
 
@@ -439,6 +466,14 @@ class BacktestEngine:
 
                     if sig_row.get("signal") == "BUY":
                         pending_entries[ticker] = sig_row.get("composite_score", 0.0)
+                        signal_funnel.append({
+                            "date": current_date, "ticker": ticker,
+                            "composite_score": sig_row.get("composite_score", float("nan")),
+                            "breakout_strength": sig_row.get("breakout_strength", float("nan")),
+                            "vol_ratio": sig_row.get("vol_ratio", float("nan")),
+                            "close": sig_row.get("close", float("nan")),
+                            "fate": "queued",  # will be updated in step 1
+                        })
 
             # ── 4. Record equity ──
             portfolio.update_equity(current_prices)
@@ -486,4 +521,6 @@ class BacktestEngine:
 
         logger.info("\n" + format_metrics_report(metrics))
 
-        return equity_curve, trade_log, metrics
+        signal_funnel_df = pd.DataFrame(signal_funnel)
+
+        return equity_curve, trade_log, metrics, signal_funnel_df
