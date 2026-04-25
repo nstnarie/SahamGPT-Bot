@@ -41,6 +41,8 @@ class Position:
     pyramid_count: int = 0             # number of add-ons executed so far
     pyramid_shares: int = 0            # total additional shares from pyramids
     pyramid_cost: float = 0.0          # total cost of pyramid adds
+    # Step 16: consecutive days below trend MA (for 2-day confirmation)
+    trend_break_count: int = 0
 
 
 @dataclass
@@ -165,6 +167,7 @@ class PortfolioManager:
     def check_exit_conditions(self, position, current_close, current_low,
                                current_atr, composite_score, regime, trading_day,
                                ff_consecutive_sell=0, current_ma10=None,
+                               current_ma_bw=None,
                                is_foreign_driven=False, acc_score=0):
         """
         Exit logic v7:
@@ -201,8 +204,20 @@ class PortfolioManager:
 
         # 3. HIGH PERFORMER TREND EXIT
         if position.in_trend_mode and current_ma10 is not None:
-            if current_close < current_ma10:
-                return "TREND_EXIT", 1.0
+            # Step 16: Adaptive MA — big winners use wider MA for more room
+            use_ma = current_ma10
+            if (self.exits.trend_exit_ma_big_winner != self.exits.trend_exit_ma
+                    and profit_pct >= self.exits.trend_big_winner_threshold
+                    and current_ma_bw is not None):
+                use_ma = current_ma_bw
+
+            if current_close < use_ma:
+                # Step 16: N-day confirmation before exiting
+                position.trend_break_count += 1
+                if position.trend_break_count >= self.exits.trend_exit_confirm_days:
+                    return "TREND_EXIT", 1.0
+            else:
+                position.trend_break_count = 0
             if regime == "BEAR":
                 return "REGIME_EXIT", self.exits.bear_regime_close_fraction
             return "", 0.0

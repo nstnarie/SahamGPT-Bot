@@ -49,8 +49,15 @@ class SignalCombiner:
         # Step 7: composite signal quality score for ranking
         result = self._compute_signal_quality(result)
 
-        # Add trend exit indicators (MA10 for high-performers)
-        result["ma_10"] = result["close"].rolling(10, min_periods=5).mean()
+        # Add trend exit indicators (configurable MA for high-performers)
+        trend_ma_period = self.config.exit.trend_exit_ma
+        result["ma_10"] = result["close"].rolling(trend_ma_period, min_periods=5).mean()
+        # Step 16: wider MA for big winners (adaptive trend exit)
+        bw_ma_period = self.config.exit.trend_exit_ma_big_winner
+        if bw_ma_period != trend_ma_period:
+            result["ma_bw"] = result["close"].rolling(bw_ma_period, min_periods=5).mean()
+        else:
+            result["ma_bw"] = result["ma_10"]
 
         # Align regime
         if not regime_df.empty:

@@ -164,6 +164,15 @@ class EntryFilterConfig:
     max_price_vs_ma200_for_bs_filter: float = 10.0   # only applies when price_vs_ma200 < this
     use_ma200_bs_combined_filter: bool = True
 
+    # Step 16: Sector blocking — block sectors with 0 big winners across 3 years.
+    # Consumer Cyclical: 23 trades, 43.5% WR, 0 BW
+    # Financial Services: 18 trades, 38.9% WR, 0 BW
+    # Industrials: 25 trades, 28.0% WR, 0 BW
+    blocked_sectors: List[str] = field(default_factory=lambda: [
+        "Consumer Cyclical", "Financial Services", "Industrials"
+    ])
+    use_sector_filter: bool = True
+
 
 @dataclass
 class SignalRankingConfig:
@@ -222,14 +231,19 @@ class ExitConfig:
 
     # Partial profit: sell 30% at +15%
     partial_sell_fraction: float = 0.30
-    partial_target_pct: float = 0.15
+    partial_target_pct: float = 0.10
 
     # NEW: Trend-following exit for high-performers
     # Instead of trailing stop, use MA break as exit signal
     # If stock gained > trend_threshold, switch to trend exit mode:
     # only exit when price closes below trend_exit_ma
     trend_threshold_pct: float = 0.15  # +15% gain triggers trend mode
-    trend_exit_ma: int = 10  # exit when close < 10-day MA (short-term trend)
+    trend_exit_ma: int = 10  # exit when close < N-day MA (short-term trend)
+
+    # Step 16: Trend exit variants for mega-winner retention
+    trend_exit_confirm_days: int = 1  # consecutive closes below MA to exit (1=immediate, 2=2-day confirm)
+    trend_exit_ma_big_winner: int = 20  # wider MA for positions with gain >= threshold below
+    trend_big_winner_threshold: float = 0.30  # gain threshold to switch to wider MA
 
     # Time exit
     time_exit_min_gain: float = 0.03

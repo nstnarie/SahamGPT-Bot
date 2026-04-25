@@ -232,6 +232,13 @@ class BacktestEngine:
                                 _set_fate(ticker, "ma200_bs_filter")
                                 continue
 
+                        # Step 16: Sector filter — block sectors with 0 big winners.
+                        if ef.use_sector_filter and ef.blocked_sectors:
+                            sector = stock_sectors.get(ticker, "")
+                            if sector in ef.blocked_sectors:
+                                _set_fate(ticker, "sector_filter")
+                                continue
+
                         atr = 0.0
                         if sig_df is not None and current_date in sig_df.index:
                             atr = sig_df.loc[current_date].get("atr", 0)
@@ -319,10 +326,12 @@ class BacktestEngine:
 
                 # Get MA10, is_foreign_driven, and accumulation score for exit logic
                 current_ma10 = None
+                current_ma_bw = None
                 is_foreign_driven = False
                 acc_score = 0
                 if sig_df is not None and current_date in sig_df.index:
                     current_ma10 = sig_df.loc[current_date].get("ma_10", None)
+                    current_ma_bw = sig_df.loc[current_date].get("ma_bw", None)
                     is_foreign_driven = bool(sig_df.loc[current_date].get("is_foreign_driven", False))
                     acc_score = float(sig_df.loc[current_date].get("accumulation_score", 0))
 
@@ -334,6 +343,7 @@ class BacktestEngine:
                     composite_score, regime, pos.days_held,
                     ff_consecutive_sell=ff_consecutive_sell,
                     current_ma10=current_ma10,
+                    current_ma_bw=current_ma_bw,
                     is_foreign_driven=is_foreign_driven,
                     acc_score=acc_score,
                 )
