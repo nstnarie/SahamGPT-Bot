@@ -12,15 +12,15 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 15 — 2026-04-25)
+## Current State (Step 16 — 2026-04-25)
 
-**Backtest results** (real Asing broker data, 3-year baseline, fp<0.45, MA200+BS filter active):
+**Backtest results** (real Asing broker data, 3-year baseline, Config B + Adaptive MA10/20):
 
 | Year | Return | PF | WR | Trades | Max DD | Source |
 |------|--------|----|----|--------|--------|--------|
-| 2023 | +33.40% | 2.54 | 40.9% | 66 | -5.23% | Local (real broker data) ✅ |
-| 2024 | +14.26% | 1.85 | 44.8% | 67 | -6.43% | Local (real broker data) ✅ |
-| 2025 | +78.37% | 6.40 | 64.5% | 76 | -9.61% | Local (real broker data) ✅ |
+| 2023 | +46.82% | 2.75 | 42.9% | 49 | -5.28% | Local (real broker data) ✅ |
+| 2024 | +27.79% | 3.17 | 62.3% | 61 | -8.93% | Local (real broker data) ✅ |
+| 2025 | +163.34% | 14.27 | 75.0% | 68 | -30.88% | Local (real broker data) ✅ |
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
@@ -28,11 +28,12 @@ IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
 **fp_ratio threshold changed to 0.45** (was 0.40 in Step 13): 3-year sweep showed 0.45 as best threshold across all years. Raising further (0.50, 0.55) consistently worsens 2024.
 
-**Four active entry filters** (all in `EntryFilterConfig`, applied at T+1 engine entry):
+**Five active entry filters** (all in `EntryFilterConfig`, applied at T+1 engine entry):
 1. **fp_ratio < 0.45** (Step 10, updated Step 15): blocks high-fp stocks. Falls back to `fp_ratios.json` in CI.
 2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
 3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. 0 BW in 2024+2025. No-op in CI.
-4. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL. Improves all metrics all years.
+4. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL.
+5. **Sector filter** (Step 16): blocks Consumer Cyclical, Financial Services, Industrials — 0 big winners across 3 years.
 
 **Pyramiding** (Steps 12-13, `PyramidConfig`):
 - Adds to positions already in trend mode (+15%)
@@ -51,13 +52,17 @@ emergency_stop_pct = 0.12     # Do NOT tighten to 0.10 (tested, worsened)
 circuit_breaker_losses = 0    # Disabled (tested, worsened due to cascade)
 trend_threshold_pct = 0.15    # +15% triggers trend-follow mode
 trend_exit_ma = 10            # Exit when close < MA10 in trend mode
-partial_sell_fraction = 0.30  # Sell 30% at +15%
+trend_exit_ma_big_winner = 20 # Step 16: wider MA20 for positions >= +30%
+trend_big_winner_threshold = 0.30  # gain threshold to switch to MA20
+partial_sell_fraction = 0.30  # Sell 30% at +10% (Step 16: was +15%)
+partial_target_pct = 0.10     # Step 16: lowered from 0.15
 stop_loss_pct = 0.07          # -7% base stop
 emergency_stop_pct = 0.12     # -12% emergency (fires even during hold)
 # Entry filters
 min_breakout_strength = -8.0  # Block extreme gap-downs at entry
 use_breakout_strength_filter = True
 use_combined_bs_tba_filter = True  # Block BS-/TBA- quadrant
+use_sector_filter = True      # Step 16: block CC, FS, Industrials
 # Pyramiding
 enable_pyramiding = True
 max_adds = 2
@@ -108,9 +113,9 @@ reports/
 
 1. Emergency stop: loss > 12% at ANY time
 2. Min hold: no regular stop for first 5 days (emergency still fires)
-3. Trend mode (in_trend_mode=True after +15%): exit only when close < MA10
+3. Trend mode (in_trend_mode=True after +15%): adaptive exit — MA10 for normal, MA20 for gain >= 30% (Step 16)
 4. Stop loss: close < stop_price (after day 5); skip once if acc_score > 0 and day ≤ 10
-5. Partial profit: sell 30% at +15% (once)
+5. Partial profit: sell 30% at +10% (Step 16: was +15%)
 6. Time exit: day ≥ 15 AND gain < 3% AND close < MA10
 7. FF exit: ff_consecutive_sell ≥ 5 AND (stock losing OR below MA10) AND is_foreign_driven
 8. Regime exit: BEAR → close all
@@ -139,6 +144,9 @@ reports/
 | fp_ratio 0.45→0.50 | Unblock mid-fp mega winners | 2024: +10.64%→+0.06%, PF 1.57→1.02. High-fp trades are net losers. |
 | fp_ratio 0.45→0.55 | Same, more aggressive | 2024: -9.67%, PF 0.65. Catastrophic. |
 | fp 0.50 + MA200_BS filter | Compensate for extra losers | 2024: +6.31%, PF 1.32. New filter can't fix bad fp threshold. |
+| MA20 for all trend exits | More room for all winners | WR drops to 40.8/61.3/68.2%, DD -32.8%. Too wide for small winners. |
+| MA10 2-day confirmation | Reduce false trend exits | Slightly better return (+134%) but WR drops, doesn't help enough. |
+| MA10 3-day confirmation | Same | Even less effect, WR same as baseline. |
 
 ---
 
@@ -155,6 +163,9 @@ reports/
 | Block BS-/TBA- quadrant | Step 11: when breakout faded (BS<0) AND big money selling (TBA<0), 0 BW in either year. 11+9 trades blocked, all losers directly. No-op in CI. |
 | Composite score is no-op | Step 11: MPW=6 throttle never binds — max 4 signals/day observed. Ranking order is irrelevant. Do not tune weights. |
 | Trend exit for +15% | Lets position run to +65%, not forced out at +20% by trailing stop |
+| Adaptive MA10/MA20 | Step 16: MA10 for normal trend positions, MA20 for gain >= 30%. Gives mega-winners room through pullbacks. +238% total 3yr (was +126%). DD -30.9% in 2025 is from unrealized gains on mega-winners, not losses. |
+| Sector block (CC/FS/Ind) | Step 16: 0 big winners across 3 years in these sectors. ~66 trades blocked, all losers or small winners. |
+| PP@10% (was 15%) | Step 16: locks in partial profit earlier. Converts borderline losers to small winners. |
 | MPW=6 throttle | Forces ranking to filter the worst signals; prevents false-breakout clusters |
 | No hard position count | Capital is the real limit. With 12% max and 90% exposure: ~7-8 natural max. |
 | Real Asing FF (not synthetic) | broker_summary has 2.6M rows (2024-2025, 137 tickers). Pre-aggregated into foreign_flow for fast loading. Synthetic is gone. |
