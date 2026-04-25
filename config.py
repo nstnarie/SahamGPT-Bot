@@ -146,7 +146,7 @@ class EntryFilterConfig:
     # 2024 analysis: low-fp (< 0.40) = 52% WR, +117.7M; high-fp (>= 0.40) = 32% WR, -100M.
     # fp_ratio = Asing traded value / total traded value (computed from broker_summary).
     # Note: uses full-period data (2024-2025 broker_summary) — minor lookahead for 2024 backtest.
-    max_fp_ratio: float = 0.40
+    max_fp_ratio: float = 0.45
     use_fp_filter: bool = True
 
     # Combined BS/TBA filter (Step 11): block when breakout faded AND big money selling.
@@ -154,6 +154,15 @@ class EntryFilterConfig:
     # PF improvement: 1.49→2.48 (2024), 2.00→2.54 (2025) — blocks 11+9 trades, 0 BW lost.
     # No-op in CI (top_broker_acc=0 when broker DB absent → tba<0 never fires).
     use_combined_bs_tba_filter: bool = True
+
+    # Step 15: False breakout filter — block when stock is just above MA200 (0-10%)
+    # AND breakout_strength < 0 (price gapped down below breakout level at T+1 open).
+    # Analysis (Step 15, 3-year): 43 trades, 20.9% WR, 0 big winners blocked.
+    # Net PnL of blocked trades: -103.8M. Consistent across all 3 years.
+    # Intuition: stock in "neutral zone" near MA200 + failed breakout = textbook false breakout.
+    # Applied at ENGINE entry time (T+1 open), same as min_breakout_strength filter.
+    max_price_vs_ma200_for_bs_filter: float = 10.0   # only applies when price_vs_ma200 < this
+    use_ma200_bs_combined_filter: bool = True
 
 
 @dataclass

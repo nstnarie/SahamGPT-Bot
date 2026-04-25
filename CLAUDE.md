@@ -12,21 +12,24 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 13 — 2026-04-19)
+## Current State (Step 15 — 2026-04-25)
 
-**Backtest results** (real Asing broker data, all filters + pyramiding active):
+**Backtest results** (real Asing broker data, 3-year baseline, fp<0.45):
 
 | Year | Return | PF | WR | Trades | Max DD | Source |
 |------|--------|----|----|--------|--------|--------|
-| 2024 | +17.77% | 2.32 | 47.8% | 46 | -6.70% | Local (real broker data) ✅ |
-| 2025 | +40.97% | 4.18 | 59.6% | 52 | -7.44% | Local (real broker data) ✅ |
-| 2024 CI | pending | — | — | — | — | GitHub CI (no broker DB) |
-| 2025 CI | pending | — | — | — | — | GitHub CI (no broker DB) |
+| 2023 | +30.99% | 2.22 | 37.5% | 72 | -5.68% | Local (real broker data) ✅ |
+| 2024 | +10.64% | 1.57 | 41.1% | 73 | -6.75% | Local (real broker data) ✅ |
+| 2025 | +74.99% | 5.37 | 59.8% | 82 | -10.46% | Local (real broker data) ✅ |
 
-IHSG 2024: -3.33% | IHSG 2025: +20.71%
+IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
+
+**2023 broker data integrated** (Step 15): 1,297,310 rows merged from GitHub artifact via `scripts/merge_2023_broker_data.py` + `scripts/aggregate_2023_foreign_flow.py`. Now have 3-year backtest coverage.
+
+**fp_ratio threshold changed to 0.45** (was 0.40 in Step 13): 3-year sweep showed 0.45 as best threshold across all years. Raising further (0.50, 0.55) consistently worsens 2024.
 
 **Three active entry filters** (all in `EntryFilterConfig`):
-1. **fp_ratio < 0.40** (Step 10): blocks high-fp stocks (BBCA, BMRI, BBRI, TLKM). Falls back to `fp_ratios.json` in CI.
+1. **fp_ratio < 0.45** (Step 10, updated Step 15): blocks high-fp stocks. Falls back to `fp_ratios.json` in CI.
 2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
 3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. BS-/TBA- quadrant has 0 direct BW in 2024+2025. No-op in CI (TBA=0 when broker DB absent).
 
@@ -131,6 +134,9 @@ reports/
 | partial_sell = 0.0 | Let winners run longer | Big winners 14→8, WR -7pts both years |
 | breakout_strength >= 0 filter | Only enter above breakout | Blocks 50% of big winners (gap-down recovery trades) |
 | Composite score recalibration | Fix broken Q5 ranking | Zero effect — MPW=6 throttle never binds (max 4 signals/day) |
+| volume_spike_max 5→10 | Unblock high-volume mega winners | 2024: +10.64%→+5.69%, PF 1.57→1.27. Only 4 new mega winner tickers genuinely unblocked — the other "41 blocked" were also blocked by fp/price/ma200. |
+| fp_ratio 0.45→0.50 | Unblock mid-fp mega winners | 2024: +10.64%→+0.06%, PF 1.57→1.02. High-fp trades are net losers. |
+| fp_ratio 0.45→0.55 | Same, more aggressive | 2024: -9.67%, PF 0.65. Catastrophic. |
 
 ---
 
@@ -142,7 +148,7 @@ reports/
 | No RSI/MACD at entry | These indicators are LAGGING. At breakout troughs, both look terrible. |
 | No FF at entry | FF at trough has Cohen's d = -0.0001. Zero predictive power. |
 | min_hold=5 | Trades surviving 5 days have 49% WR vs 7% for days 1-5. Step 10 re-tested min_hold=3 with real data: day-4 cliff (-132M) worse than day-6 (-126M), TREND_EXIT 16→9 trades. |
-| fp_ratio < 0.40 | Step 10: low-fp stocks = 52% WR, +117.7M; high-fp = 32% WR, -100M. High-fp stocks are macro hedge vehicles (BBCA, BMRI, BBRI, TLKM) — breakouts are foreign flow noise, not accumulation. |
+| fp_ratio < 0.45 | Step 10 (updated Step 15): low-fp stocks have higher WR; high-fp stocks are macro hedge vehicles (BBCA, BMRI, BBRI, TLKM). Threshold 0.45 is the 3-year sweet spot. Tested 0.50 and 0.55 — both worsen 2024 (0.50: +0.06%, 0.55: -9.67%). Static aggregate fp_ratio is a known limitation — some stocks (TPIA, BREN, DSSA) swing between local/foreign-driven year-to-year. Future plan: use fp_ratio as accumulation flag (not hard block) for stocks in the 0.45-0.60 band. |
 | BS >= -8% at entry | Step 11: quick failures average BS=-3.1% to -4.8% (enter below breakout). -8% threshold blocks extreme gap-downs (4 trades/year, 0 BW lost directly). |
 | Block BS-/TBA- quadrant | Step 11: when breakout faded (BS<0) AND big money selling (TBA<0), 0 BW in either year. 11+9 trades blocked, all losers directly. No-op in CI. |
 | Composite score is no-op | Step 11: MPW=6 throttle never binds — max 4 signals/day observed. Ranking order is irrelevant. Do not tune weights. |
@@ -161,7 +167,8 @@ reports/
 | Price OHLCV | Yahoo Finance (`.JK` suffix) | 2020–present |
 | IHSG index | Yahoo Finance (`^JKSE`) | 2020–present |
 | Foreign flow (real Asing) | Pre-aggregated from broker_summary into foreign_flow table | 2024-01-02 to present |
-| Broker summary (raw) | Stockbit chartbit API | 2023-01-01 to present (2.6M rows 2024-2025 + 2023 scrape in progress, 137 tickers) |
+| Broker summary (raw) | Stockbit chartbit API | 2023-01-01 to present (2.6M rows 2024-2025 + 1.3M rows 2023, 137 tickers) ✅ |
+| Foreign flow (2023) | Aggregated from 2023 broker_summary | 2023-01-01 to 2023-12-31, 96% coverage ✅ |
 | KSEI net flow | Stockbit chartbit (fitemid=3194) | 2024-2025 (stored in foreign_flow) |
 
 **Architecture**: `broker_summary` (raw Stockbit data) → aggregated into `foreign_flow` (net Asing per ticker/day) → used by backtest and daily signals.
@@ -189,63 +196,43 @@ reports/
 
 ---
 
-## Next Priorities (as of 2026-04-20)
+## Next Priorities (as of 2026-04-25)
+
+### Step 15 Phase 1 (IN PROGRESS): Loser Reduction Analysis
+
+Analyze all losing trades across 2023-2025. Find entry-day patterns that predict failures with low WR and no big winners blocked. Previous session identified "MA200 0-10% AND BS < 0" as candidate (30 trades, 16.7% WR, 0 BW lost) — now validate with 2023 data.
+
+**Files**: `reports_local_2023/trade_log.csv`, `reports_local_2024/trade_log.csv`, `reports_local_2025/trade_log.csv`
+
+---
+
+### Step 15 Phase 2: fp_ratio as Accumulation Flag (Future)
+
+**Concept**: Stop hard-blocking stocks with fp 0.45–0.60. Instead, for high-fp stocks, require foreign flow to be in NET ACCUMULATION (positive net 5d) before allowing entry. Keep hard block only for truly foreign-heavy stocks (fp ≥ 0.60).
+
+**Why**: Aggregate fp_ratio is static and hides year-to-year swings. DSSA fp=0.025 in 2023 (almost entirely local-driven) but blocked by aggregate 0.546. TPIA fp=0.385 in 2023. Yearly breakdown shows 5 stocks are "local-driven in some years" and 17 more are "borderline".
+
+**Categories from analysis**:
+- Hard-block (all years): fp ≥ 0.60 — BBCA (0.703), BMRI (0.659), BBRI (0.649), TLKM (0.668), ASII (0.637), KLBF (0.624), AMRT (0.631), BBNI (0.610), INDF (0.606), CMRY (0.596)
+- Flag-mode (require ff_net_5d > 0): fp 0.45–0.60 — BREN, TPIA, DSSA, AMMN, ADRO, JPFA, etc.
+- Free entry: fp < 0.45 — current behavior
+
+**Prerequisite**: Phase 1 loser reduction must come first.
+
+---
 
 ### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
 
-**Problem**: Daily signal runs on GitHub with no access to `idx_swing_trader.db`. Result:
-- `top_broker_acc = 0` for all tickers → BS/TBA combined filter is a **no-op in live signals**
-- BS-/TBA- losers (~19% WR, 0 BW) pass through unfiltered to Telegram
-- Live signal quality is lower than what the local backtest shows
+Daily signal runs on GitHub with no broker DB. BS/TBA combined filter is a no-op in live signals. Fix: pre-compute `top_broker_acc` per ticker/day → `broker_acc_daily.csv` → commit to repo.
 
-**Fix**: Pre-compute `top_broker_acc` per ticker per day from local DB → save as `broker_acc_daily.csv` → commit to repo. Engine loads it as fallback when broker DB absent (same pattern as `fp_ratios.json`).
-
-**Files to touch**: `database/data_loader.py` (pre-compute script), `backtest/engine.py` (load CSV fallback), `signals/signal_combiner.py` (inject into sig_df).
-
-**Do this before trusting live Telegram signals.**
-
----
-
-### Step 15: Raise volume_spike_max and fp_ratio threshold (pending experiments)
-
-**Root cause found (Step 14 signal funnel analysis)**: 49/66 mega winners in 2024 never generate a signal. Two filters are over-blocking:
-
-1. **`volume_spike_max = 5.0`** — blocks 41/66 mega winners. Mega winner trough breakouts ARE high-volume (TINS=11.5x, NIKL=12.6x, JARR=13.7x). The pump-and-dump cap is too conservative.
-   - Experiment: raise to `10.0`
-   - File: `config.py:BreakoutConfig.volume_spike_max`
-
-2. **`fp_ratio >= 0.40`** — blocks 36/66 mega winners. Real hedge vehicles have fp > 0.70 (BBCA=0.82, BMRI=0.78). Threshold over-fires on legitimate mega winners (TPIA+250% fp=0.525, BREN+182% fp=0.549, BRIS+96% fp=0.462).
-   - Experiment: raise to `0.55`
-   - File: `config.py:EntryFilterConfig.max_fp_ratio`
-
-**TINS case confirmed**: March 8 2024 breakout was 11.5x volume (user was right). Blocked by vol_too_high (>5x) AND fp_ratio (0.403). Had 12 near-breakout days, ALL blocked.
-
-Run both 2024 + 2025 for each experiment. Accept only if both improve or one improves / other neutral.
-
----
-
-### 2023 Broker Summary Scrape (in progress)
-
-**Confirmed**: Stockbit has 2023 data (BBRI Q4 2023 test = 3,711 records).
-**Plan**: 4 quarters × 4 batches = 16 sequential runs (one quarter at a time, batch=25 tickers, to stay under 6h GitHub limit).
-**Status**: Batch 1 Q1 2023 running (run 24644173063). Continue sequentially until all 16 runs complete.
-**Purpose**: Enables 2023 backtest validation — verify filters + pyramiding don't worsen pre-2024 regimes.
-
-```bash
-# Template for triggering next run:
-gh workflow run scrape_broker_summary.yml \
-  --field start_date="2023-01-01" \
-  --field end_date="2023-03-31" \
-  --field batch="2" \
-  --field tickers=""
-```
+**Files to touch**: `database/data_loader.py`, `backtest/engine.py`, `signals/signal_combiner.py`.
 
 ---
 
 ### Research / Optional
 
-1. **2021-2023 validation** — Run backtests after 2023 broker data scrape is complete.
-2. **Rolling fp_ratio** — Current `fp_ratios.json` uses full 2024-2025 data (minor lookahead bias for 2024 backtest).
+1. **fp_ratios.json** — Needs regeneration with 2023-2025 data for CI compatibility.
+2. **2021-2022 validation** — Run backtests for earlier years once price data confirmed.
 
 ---
 
@@ -269,7 +256,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_19_v34.md` — Step 12: pyramiding merged. Local returns +14.40%/+39.53%, PF 2.06/4.07.
+Most recent: `HANDOFF_SESSION_2026_04_25_v35.md` — Step 15: 2023 broker data integrated, 3-year baseline established (fp=0.45), vol/fp experiments run and rejected, mega winner lists generated for 2023/2024/2025, fp_ratio analysis completed.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 

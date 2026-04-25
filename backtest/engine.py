@@ -219,6 +219,19 @@ class BacktestEngine:
                                 _set_fate(ticker, "bs_tba_filter")
                                 continue
 
+                        # Step 15: MA200+BS combined filter — false breakout in neutral zone.
+                        # Block when stock is just above MA200 (0-10%) AND breakout_strength < 0.
+                        # Analysis (3-year): 43 trades, 20.9% WR, 0 big winners, -103.8M PnL.
+                        if ef.use_ma200_bs_combined_filter and sig_df is not None and current_date in sig_df.index:
+                            sig_row = sig_df.loc[current_date]
+                            bs = sig_row.get("breakout_strength", float("nan"))
+                            pvm = sig_row.get("price_vs_ma200", float("nan"))
+                            if (not math.isnan(bs) and not math.isnan(pvm)
+                                    and bs < 0
+                                    and 0 <= pvm < ef.max_price_vs_ma200_for_bs_filter):
+                                _set_fate(ticker, "ma200_bs_filter")
+                                continue
+
                         atr = 0.0
                         if sig_df is not None and current_date in sig_df.index:
                             atr = sig_df.loc[current_date].get("atr", 0)
