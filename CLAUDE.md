@@ -14,13 +14,13 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ## Current State (Step 15 — 2026-04-25)
 
-**Backtest results** (real Asing broker data, 3-year baseline, fp<0.45):
+**Backtest results** (real Asing broker data, 3-year baseline, fp<0.45, MA200+BS filter active):
 
 | Year | Return | PF | WR | Trades | Max DD | Source |
 |------|--------|----|----|--------|--------|--------|
-| 2023 | +30.99% | 2.22 | 37.5% | 72 | -5.68% | Local (real broker data) ✅ |
-| 2024 | +10.64% | 1.57 | 41.1% | 73 | -6.75% | Local (real broker data) ✅ |
-| 2025 | +74.99% | 5.37 | 59.8% | 82 | -10.46% | Local (real broker data) ✅ |
+| 2023 | +33.40% | 2.54 | 40.9% | 66 | -5.23% | Local (real broker data) ✅ |
+| 2024 | +14.26% | 1.85 | 44.8% | 67 | -6.43% | Local (real broker data) ✅ |
+| 2025 | +78.37% | 6.40 | 64.5% | 76 | -9.61% | Local (real broker data) ✅ |
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
@@ -28,10 +28,11 @@ IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
 **fp_ratio threshold changed to 0.45** (was 0.40 in Step 13): 3-year sweep showed 0.45 as best threshold across all years. Raising further (0.50, 0.55) consistently worsens 2024.
 
-**Three active entry filters** (all in `EntryFilterConfig`):
+**Four active entry filters** (all in `EntryFilterConfig`, applied at T+1 engine entry):
 1. **fp_ratio < 0.45** (Step 10, updated Step 15): blocks high-fp stocks. Falls back to `fp_ratios.json` in CI.
 2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
-3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. BS-/TBA- quadrant has 0 direct BW in 2024+2025. No-op in CI (TBA=0 when broker DB absent).
+3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. 0 BW in 2024+2025. No-op in CI.
+4. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL. Improves all metrics all years.
 
 **Pyramiding** (Steps 12-13, `PyramidConfig`):
 - Adds to positions already in trend mode (+15%)
@@ -137,6 +138,7 @@ reports/
 | volume_spike_max 5→10 | Unblock high-volume mega winners | 2024: +10.64%→+5.69%, PF 1.57→1.27. Only 4 new mega winner tickers genuinely unblocked — the other "41 blocked" were also blocked by fp/price/ma200. |
 | fp_ratio 0.45→0.50 | Unblock mid-fp mega winners | 2024: +10.64%→+0.06%, PF 1.57→1.02. High-fp trades are net losers. |
 | fp_ratio 0.45→0.55 | Same, more aggressive | 2024: -9.67%, PF 0.65. Catastrophic. |
+| fp 0.50 + MA200_BS filter | Compensate for extra losers | 2024: +6.31%, PF 1.32. New filter can't fix bad fp threshold. |
 
 ---
 
@@ -198,11 +200,12 @@ reports/
 
 ## Next Priorities (as of 2026-04-25)
 
-### Step 15 Phase 1 (IN PROGRESS): Loser Reduction Analysis
+### Step 15 Phase 1 COMPLETE — MA200+BS False-Breakout Filter
 
-Analyze all losing trades across 2023-2025. Find entry-day patterns that predict failures with low WR and no big winners blocked. Previous session identified "MA200 0-10% AND BS < 0" as candidate (30 trades, 16.7% WR, 0 BW lost) — now validate with 2023 data.
+Filter blocks `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0` at T+1 entry.
+Result: every year improved (return, PF, WR, DD). Committed b998223.
 
-**Files**: `reports_local_2023/trade_log.csv`, `reports_local_2024/trade_log.csv`, `reports_local_2025/trade_log.csv`
+Also analyzed but rejected: `dist_from_52w_high [-20,-10%)` — hurts 2023 (PANI near-BW blocked). `atr_pct [1.75,2.5%)` — 2024 nearly neutral, weak candidate.
 
 ---
 
