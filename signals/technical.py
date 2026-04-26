@@ -49,6 +49,7 @@ class TechnicalAnalyzer:
         # Volume
         out["vol_avg_20"] = out["volume"].rolling(20, min_periods=5).mean()
         out["vol_ratio"] = out["volume"] / out["vol_avg_20"].replace(0, np.nan)
+        out["avg_daily_value_20d"] = (out["close"] * out["volume"]).rolling(20, min_periods=5).mean()
 
         # 52-week (252 trading days) high for entry quality filter
         out["high_252d"] = out["high"].rolling(window=252, min_periods=60).max()

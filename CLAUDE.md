@@ -12,17 +12,25 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 18 — 2026-04-26)
+## Current State (Step 19 — 2026-04-27)
 
-**Backtest results** (real Asing broker data, ff-corr filter, sector override ON):
+**Backtest results** (real Asing broker data, ff-corr filter, sector override ON, liquidity filter ON):
 
 | Year | Return | PF | WR | Trades | Source |
 |------|--------|----|----|--------|--------|
 | 2023 | +48.5% | 2.14 | 42.7% | 75 | Local ✅ |
-| 2024 | +34.5% | 3.24 | 53.6% | 84 | Local ✅ |
-| 2025 | +127.5% | 8.85 | 67.1% | 79 | Local ✅ |
+| 2024 | +31.1% | 3.30 | 53.7% | 82 | Local ✅ |
+| 2025 | +127.9% | 9.15 | 66.2% | 77 | Local ✅ |
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
+
+**Step 19: Liquidity filter** (`min_avg_daily_value = 0.5B IDR`):
+Blocks stocks with 20-day rolling avg daily value (close × volume) below Rp 500M.
+Applied at signal generation time in `_add_breakout_signals()`. Enforces the existing
+(but previously dead) `UniverseConfig.min_avg_daily_value` config field.
+Tested 0.5B vs 1B: 0.5B preserves BALI, blocks only truly untradeable stocks (ARGO 0.04B,
+DSSA early-2024 0.18B, AGII 0.28B). Zero big winners blocked at 0.5B across all 3 years.
+2024 drops -3.4pp (was -6.7pp at 1B); 2023 unchanged; 2025 +0.4pp.
 
 **Step 18: ff-price correlation filter replaces fp_ratio** (`ff_corr_ratios.json`):
 Previously blocked 61 stocks by volume participation (fp >= 0.45). Now blocks 18 stocks
@@ -35,12 +43,13 @@ TLKM, BRIS, GOTO, PTPP, GJTL, UNTR, INDF, DEWA.
 Allows entries in blocked sectors (Consumer Cyclical, Financial Services, Industrials)
 when breakout_strength > 5% AND vol_ratio > 3x. Added HRTA as BW in 2023.
 
-**Five active entry filters** (all in `EntryFilterConfig`, applied at T+1 engine entry):
-1. **ff_corr < 0.30** (Step 18): blocks stocks where foreign flow drives the price. Source: `ff_corr_ratios.json`.
-2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
-3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. 0 BW in 2024+2025. No-op in CI.
-4. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL.
-5. **Sector filter + override** (Step 16/17): blocks Consumer Cyclical, Financial Services, Industrials — but allows when BS > 5% AND vol > 3x.
+**Six active signal/entry filters:**
+1. **avg_daily_value_20d >= 0.5B** (Step 19): blocks illiquid stocks at signal generation. Source: `UniverseConfig.min_avg_daily_value`. Applied in `signal_combiner.py`.
+2. **ff_corr < 0.30** (Step 18): blocks stocks where foreign flow drives the price. Source: `ff_corr_ratios.json`. Applied at T+1 engine entry.
+3. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
+4. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. 0 BW in 2024+2025. No-op in CI.
+5. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL.
+6. **Sector filter + override** (Step 16/17): blocks Consumer Cyclical, Financial Services, Industrials — but allows when BS > 5% AND vol > 3x.
 
 **Pyramiding** (Steps 12-13, `PyramidConfig`):
 - Adds to positions already in trend mode (+15%)
@@ -70,6 +79,8 @@ min_breakout_strength = -8.0  # Block extreme gap-downs at entry
 use_breakout_strength_filter = True
 use_combined_bs_tba_filter = True  # Block BS-/TBA- quadrant
 use_sector_filter = True      # Step 16: block CC, FS, Industrials
+# Liquidity
+min_avg_daily_value = 500_000_000  # Step 19: Rp 0.5B 20d rolling avg daily value
 # Pyramiding
 enable_pyramiding = True
 max_adds = 2
@@ -107,8 +118,8 @@ reports/
 
 ## Signal Pipeline (per stock, per day)
 
-1. `TechnicalAnalyzer.compute_all_indicators()` — EMA, ATR, RSI, MACD, 52w high, price_vs_ma200, atr_pct, prior_return_5d
-2. `_add_breakout_signals()` — close > 20d high, vol 1.5-5x, price ≥ 150, MA200 filter, ATR% filter
+1. `TechnicalAnalyzer.compute_all_indicators()` — EMA, ATR, RSI, MACD, 52w high, price_vs_ma200, atr_pct, prior_return_5d, avg_daily_value_20d
+2. `_add_breakout_signals()` — close > 20d high, vol 1.5-5x, price ≥ 150, avg_daily_value_20d ≥ 0.5B, MA200 filter, ATR% filter
 3. `_add_foreign_flow_signals()` — FF trend (cumulative + breakout-day check), KSEI 5d filter
 4. `_add_accumulation_signals()` — broker accumulation score for hold extension
 5. `_compute_signal_quality()` — composite percentile rank score for ranking
@@ -177,6 +188,7 @@ reports/
 | No hard position count | Capital is the real limit. With 12% max and 90% exposure: ~7-8 natural max. |
 | Real Asing FF (not synthetic) | broker_summary has 2.6M rows (2024-2025, 137 tickers). Pre-aggregated into foreign_flow for fast loading. Synthetic is gone. |
 | Lean split file | idx_broker_part_a.db (4.8MB) contains pre-aggregated foreign_flow (72k rows). Workflows restore from this instead of merging 2×100MB broker_summary files. |
+| Liquidity filter 0.5B | Step 19: blocks stocks with 20d avg daily value < Rp 500M at signal time. Zero big winners blocked across 3 years. Tested 1B (too aggressive, -6.7pp in 2024), settled on 0.5B (only blocks truly untradeable stocks like ARGO 0.04B). |
 
 ---
 
@@ -216,35 +228,58 @@ reports/
 
 ---
 
-## Next Priorities (as of 2026-04-25)
+## Next Priorities (as of 2026-04-27)
 
-### Step 15 Phase 1 COMPLETE — MA200+BS False-Breakout Filter
+### Step 19 Baselines — Confirmed (2026-04-27)
 
-Filter blocks `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0` at T+1 entry.
-Result: every year improved (return, PF, WR, DD). Committed b998223.
+Liquidity filter (0.5B) added. Results:
 
-Also analyzed but rejected: `dist_from_52w_high [-20,-10%)` — hurts 2023 (PANI near-BW blocked). `atr_pct [1.75,2.5%)` — 2024 nearly neutral, weak candidate.
+| Year | Return | CAGR | PF | WR | Trades | Max DD | Sharpe | Calmar |
+|------|--------|------|----|----|--------|--------|--------|--------|
+| 2023 | +48.50% | 53.81% | 2.14 | 42.7% | 75 | -5.30% | 2.37 | 10.15 |
+| 2024 | +31.05% | 34.95% | 3.30 | 53.7% | 82 | -7.11% | 1.63 | 4.92 |
+| 2025 | +127.86% | 152.33% | 9.15 | 66.2% | 77 | -30.96% | 2.32 | 4.92 |
+
+Reports: `reports_local_2023_liq05/`, `reports_local_2024_liq05/`, `reports_local_2025_liq05/`
 
 ---
 
-### Step 15 Phase 2: fp_ratio as Accumulation Flag (Future)
+### Mega Winner Analysis — Complete (2026-04-26)
 
-**Concept**: Stop hard-blocking stocks with fp 0.45–0.60. Instead, for high-fp stocks, require foreign flow to be in NET ACCUMULATION (positive net 5d) before allowing entry. Keep hard block only for truly foreign-heavy stocks (fp ≥ 0.60).
+Ran `scripts/identify_mega_winners.py` extended for 2023. Output: `mega_winners_analysis.xlsx`.
+Definition: trough-to-peak drawup > 50% AND avg daily value >= Rp 1B/day.
 
-**Why**: Aggregate fp_ratio is static and hides year-to-year swings. DSSA fp=0.025 in 2023 (almost entirely local-driven) but blocked by aggregate 0.546. TPIA fp=0.385 in 2023. Yearly breakdown shows 5 stocks are "local-driven in some years" and 17 more are "borderline".
+| Year | Total >50% | Liquid (≥1B/day) | #1 performer |
+|------|-----------|------------------|--------------|
+| 2023 | 56 | 52 | CUAN +5,629% |
+| 2024 | 66 | 53 | PTRO +644% |
+| 2025 | 99 | 87 | JARR +3,100% |
 
-**Categories from analysis**:
-- Hard-block (all years): fp ≥ 0.60 — BBCA (0.703), BMRI (0.659), BBRI (0.649), TLKM (0.668), ASII (0.637), KLBF (0.624), AMRT (0.631), BBNI (0.610), INDF (0.606), CMRY (0.596)
-- Flag-mode (require ff_net_5d > 0): fp 0.45–0.60 — BREN, TPIA, DSSA, AMMN, ADRO, JPFA, etc.
-- Free entry: fp < 0.45 — current behavior
+**NEXT SESSION**: Cross-reference mega_winners_analysis.xlsx against trade_log.csv (all 3 years)
+to compute capture rate, identify which mega winners were missed and why (which filter blocked them).
 
-**Prerequisite**: Phase 1 loser reduction must come first.
+---
+
+### Signal Funnel Summary (Step 18 baseline, all 3 years)
+
+| Filter | 2023 | 2024 | 2025 | Total |
+|--------|------|------|------|-------|
+| executed | 40 | 44 | 47 | 131 |
+| sector_filter | 40 | 44 | 29 | 113 |
+| bs_tba_filter | 27 | 25 | 32 | 84 |
+| ma200_bs_filter | 17 | 17 | 17 | 51 |
+| bs_filter (gap-down) | 4 | 10 | 11 | 25 |
+| throttle | 3 | 8 | 11 | 22 |
+
+Note: `executed` counts initial entry signals only. Total trades (75/84/79) include pyramid adds and partial-profit exit rows.
 
 ---
 
 ### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
 
-Daily signal runs on GitHub with no broker DB. BS/TBA combined filter is a no-op in live signals. Fix: pre-compute `top_broker_acc` per ticker/day → `broker_acc_daily.csv` → commit to repo.
+Daily signal runs on GitHub with no broker DB. BS/TBA combined filter is a no-op in live signals
+(84 signals blocked in backtest but all pass through in live). Fix: pre-compute `top_broker_acc`
+per ticker/day → `broker_acc_daily.csv` → commit to repo.
 
 **Files to touch**: `database/data_loader.py`, `backtest/engine.py`, `signals/signal_combiner.py`.
 
@@ -254,6 +289,7 @@ Daily signal runs on GitHub with no broker DB. BS/TBA combined filter is a no-op
 
 1. **fp_ratios.json** — Needs regeneration with 2023-2025 data for CI compatibility.
 2. **2021-2022 validation** — Run backtests for earlier years once price data confirmed.
+3. **min_profit_to_add 15%→10%** — Lower pyramid trigger, test independently.
 
 ---
 
@@ -277,7 +313,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_25_v35.md` — Step 15: 2023 broker data integrated, 3-year baseline established (fp=0.45), vol/fp experiments run and rejected, mega winner lists generated for 2023/2024/2025, fp_ratio analysis completed.
+Most recent: `HANDOFF_SESSION_2026_04_27_v36.md` — Step 19: Liquidity filter (0.5B IDR 20d rolling avg daily value) added to signal generation. Zero big winners blocked, 2024 -3.4pp, 2023/2025 near-unchanged.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 

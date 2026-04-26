@@ -121,12 +121,14 @@ class SignalCombiner:
         # (+117%) on their breakout day. Stop loss handles bad candle entries
         # at lower cost than missing mega-winners.
         df["has_selling_pressure"] = False  # kept for signal output compatibility
+        min_adv = self.config.universe.min_avg_daily_value
         is_breakout = (
-            (df["close"] > df["high_Nd"]) &              # breaks resistance
-            (df["vol_ratio"] >= cfg.volume_spike_min) &   # volume spike
-            (df["vol_ratio"] <= cfg.volume_spike_max) &   # not pump-and-dump
-            (df["close"] >= min_price) &                  # minimum price filter
-            (df["high_Nd"].notna())                       # enough data
+            (df["close"] > df["high_Nd"]) &                          # breaks resistance
+            (df["vol_ratio"] >= cfg.volume_spike_min) &               # volume spike
+            (df["vol_ratio"] <= cfg.volume_spike_max) &               # not pump-and-dump
+            (df["close"] >= min_price) &                              # minimum price filter
+            (df["avg_daily_value_20d"] >= min_adv) &                  # liquidity filter
+            (df["high_Nd"].notna())                                   # enough data
         )
 
         # Phase B entry quality filters (Step 6)

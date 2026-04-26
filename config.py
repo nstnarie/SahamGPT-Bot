@@ -34,7 +34,7 @@ ARA_ARB_LIMITS = {"acceleration_board": 0.35, "regular": 0.25, "development_boar
 @dataclass
 class UniverseConfig:
     index_membership: str = "LQ45"
-    min_avg_daily_value: float = 5_000_000_000
+    min_avg_daily_value: float = 500_000_000  # liquidity filter: Rp 0.5B avg daily value (20d rolling)
     min_market_cap: float = 1_000_000_000_000
     max_spread_pct: Optional[float] = 0.02
     excluded_sectors: List[str] = field(default_factory=list)
