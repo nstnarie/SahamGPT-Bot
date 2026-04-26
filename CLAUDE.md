@@ -165,6 +165,10 @@ reports/
 | MA20 for all trend exits | More room for all winners | WR drops to 40.8/61.3/68.2%, DD -32.8%. Too wide for small winners. |
 | MA10 2-day confirmation | Reduce false trend exits | Slightly better return (+134%) but WR drops, doesn't help enough. |
 | MA10 3-day confirmation | Same | Even less effect, WR same as baseline. |
+| MPW 6→8 (rolling 10d) | Capture throttled signals (BRPT) | 2023 -2.4pp, 2024 -10.4pp, 2025 -11pp. Extra trades are lower-quality false breakouts. MPW=6 is confirmed sweet spot. |
+| Block 500–999 price range | 500-999 bucket has PF 0.51, 0 big winners | Cascade removes JARR +219% and PTRO +30% via capital/throttle effects. 2025: -61pp. Do not implement. |
+| Prior avg daily value ≥ 2B | Block event-spike stocks like DMAS | Blocks HRTA +34% as collateral at every threshold tested (1B–5B). Net effect neutral or negative. |
+| 52-week historical resistance breakout | Buy only stocks breaking annual highs | 2023 -16.9pp, 2024 +3pp, 2025 -46pp. Blocks PANI +90% (2023), INET +90%/TINS +96%/BRPT +69% (2025). Mega-winners break out below their prior-year high. |
 
 ---
 
@@ -257,6 +261,7 @@ Definition: trough-to-peak drawup > 50% AND avg daily value >= Rp 1B/day.
 
 **NEXT SESSION**: Cross-reference mega_winners_analysis.xlsx against trade_log.csv (all 3 years)
 to compute capture rate, identify which mega winners were missed and why (which filter blocked them).
+Use reports from `reports_local_2023_liq05/`, `reports_local_2024_liq05/`, `reports_local_2025_liq05/`.
 
 ---
 
@@ -313,7 +318,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_27_v36.md` — Step 19: Liquidity filter (0.5B IDR 20d rolling avg daily value) added to signal generation. Zero big winners blocked, 2024 -3.4pp, 2023/2025 near-unchanged.
+Most recent: `HANDOFF_SESSION_2026_04_27_v37.md` — Trade log deep-dive (HMSP, DMAS, MTEL). Four experiments tested and rejected: MPW=8, block 500-999, prior avg daily value ≥ 2B, 52-week historical resistance breakout. No code changes — all experiments reverted.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 
