@@ -172,6 +172,10 @@ class EntryFilterConfig:
         "Consumer Cyclical", "Financial Services", "Industrials"
     ])
     use_sector_filter: bool = True
+    # Step 17: allow entry in blocked sectors when signal is exceptionally strong
+    sector_override_min_bs: float = 5.0    # breakout_strength > this
+    sector_override_min_vol: float = 3.0   # vol_ratio > this
+    use_sector_override: bool = True
 
 
 @dataclass
@@ -243,7 +247,8 @@ class ExitConfig:
     # Step 16: Trend exit variants for mega-winner retention
     trend_exit_confirm_days: int = 1  # consecutive closes below MA to exit (1=immediate, 2=2-day confirm)
     trend_exit_ma_big_winner: int = 20  # wider MA for positions with gain >= threshold below
-    trend_big_winner_threshold: float = 0.30  # gain threshold to switch to wider MA
+    trend_big_winner_threshold: float = 0.3  # gain threshold to switch to wider MA
+    use_hwm_for_ma_switch: bool = False  # Step 17: use max unrealized gain (not current) for MA switch
 
     # Time exit
     time_exit_min_gain: float = 0.03

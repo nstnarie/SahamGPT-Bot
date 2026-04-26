@@ -43,6 +43,8 @@ class Position:
     pyramid_cost: float = 0.0          # total cost of pyramid adds
     # Step 16: consecutive days below trend MA (for 2-day confirmation)
     trend_break_count: int = 0
+    # Step 17: high-water mark for adaptive MA switch
+    max_profit_pct: float = 0.0
 
 
 @dataclass
@@ -148,6 +150,10 @@ class PortfolioManager:
         if current_close > position.highest_close:
             position.highest_close = current_close
 
+        # Step 17: track high-water mark for adaptive MA switch
+        if profit_pct > position.max_profit_pct:
+            position.max_profit_pct = profit_pct
+
         if profit_pct >= self.exits.trailing_activation_pct:
             position.trailing_active = True
 
@@ -204,10 +210,14 @@ class PortfolioManager:
 
         # 3. HIGH PERFORMER TREND EXIT
         if position.in_trend_mode and current_ma10 is not None:
-            # Step 16: Adaptive MA — big winners use wider MA for more room
+            # Step 16/17: Adaptive MA — big winners use wider MA for more room
+            # Step 17: use_hwm_for_ma_switch uses max unrealized gain (high-water mark)
+            # instead of current gain — prevents MA10 exit on pullbacks from +25% to +18%
             use_ma = current_ma10
+            gain_for_switch = (position.max_profit_pct if self.exits.use_hwm_for_ma_switch
+                               else profit_pct)
             if (self.exits.trend_exit_ma_big_winner != self.exits.trend_exit_ma
-                    and profit_pct >= self.exits.trend_big_winner_threshold
+                    and gain_for_switch >= self.exits.trend_big_winner_threshold
                     and current_ma_bw is not None):
                 use_ma = current_ma_bw
 

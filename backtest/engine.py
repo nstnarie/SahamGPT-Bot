@@ -233,11 +233,21 @@ class BacktestEngine:
                                 continue
 
                         # Step 16: Sector filter — block sectors with 0 big winners.
+                        # Step 17: override for exceptionally strong signals
                         if ef.use_sector_filter and ef.blocked_sectors:
                             sector = stock_sectors.get(ticker, "")
                             if sector in ef.blocked_sectors:
-                                _set_fate(ticker, "sector_filter")
-                                continue
+                                # Check for strong-signal override
+                                override = False
+                                if ef.use_sector_override and sig_df is not None and current_date in sig_df.index:
+                                    _sr = sig_df.loc[current_date]
+                                    _bs = _sr.get("breakout_strength", 0)
+                                    _vr = _sr.get("vol_ratio", 0)
+                                    if _bs > ef.sector_override_min_bs and _vr > ef.sector_override_min_vol:
+                                        override = True
+                                if not override:
+                                    _set_fate(ticker, "sector_filter")
+                                    continue
 
                         atr = 0.0
                         if sig_df is not None and current_date in sig_df.index:
