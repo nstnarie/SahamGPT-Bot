@@ -152,8 +152,9 @@ class SignalCombiner:
         if ef.use_atr_filter and "atr_pct" in df.columns:
             is_breakout = is_breakout & (df["atr_pct"] >= ef.min_atr_pct)
 
-        # EXP: fp_ratio filter — block high-fp stocks at entry
-        # High foreign participation = liquid hedge vehicle, not fundamental buying
+        # Step 18: ff-corr filter — block stocks where foreign flow drives the price.
+        # fp_ratio here contains ff-price correlation (from ff_corr_ratios.json), not volume fp.
+        # Block if corr >= 0.30 (foreigners genuinely move the price = false breakout risk).
         ef = self.config.entry_filter
         if ef.use_fp_filter and fp_ratio is not None and fp_ratio >= ef.max_fp_ratio:
             is_breakout = pd.Series(False, index=df.index)

@@ -12,28 +12,35 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 16 — 2026-04-25)
+## Current State (Step 18 — 2026-04-26)
 
-**Backtest results** (real Asing broker data, 3-year baseline, Config B + Adaptive MA10/20):
+**Backtest results** (real Asing broker data, ff-corr filter, sector override ON):
 
-| Year | Return | PF | WR | Trades | Max DD | Source |
-|------|--------|----|----|--------|--------|--------|
-| 2023 | +46.82% | 2.75 | 42.9% | 49 | -5.28% | Local (real broker data) ✅ |
-| 2024 | +27.79% | 3.17 | 62.3% | 61 | -8.93% | Local (real broker data) ✅ |
-| 2025 | +163.34% | 14.27 | 75.0% | 68 | -30.88% | Local (real broker data) ✅ |
+| Year | Return | PF | WR | Trades | Source |
+|------|--------|----|----|--------|--------|
+| 2023 | +48.5% | 2.14 | 42.7% | 75 | Local ✅ |
+| 2024 | +34.5% | 3.24 | 53.6% | 84 | Local ✅ |
+| 2025 | +127.5% | 8.85 | 67.1% | 79 | Local ✅ |
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
-**2023 broker data integrated** (Step 15): 1,297,310 rows merged from GitHub artifact via `scripts/merge_2023_broker_data.py` + `scripts/aggregate_2023_foreign_flow.py`. Now have 3-year backtest coverage.
+**Step 18: ff-price correlation filter replaces fp_ratio** (`ff_corr_ratios.json`):
+Previously blocked 61 stocks by volume participation (fp >= 0.45). Now blocks 18 stocks
+by actual price influence (Pearson correlation of daily return vs net foreign flow >= 0.30).
+Stocks like DSSA (+504%), TPIA (+229%), BREN (+153%), AMMN (+105%) are now allowed.
+Blocked (corr >= 0.30): BBRI, BBCA, BMRI, AMAN, ANTM, PSAB, ASII, BBNI, PGAS, UNVR,
+TLKM, BRIS, GOTO, PTPP, GJTL, UNTR, INDF, DEWA.
 
-**fp_ratio threshold changed to 0.45** (was 0.40 in Step 13): 3-year sweep showed 0.45 as best threshold across all years. Raising further (0.50, 0.55) consistently worsens 2024.
+**Step 17: Sector override ON** (`use_sector_override: True`):
+Allows entries in blocked sectors (Consumer Cyclical, Financial Services, Industrials)
+when breakout_strength > 5% AND vol_ratio > 3x. Added HRTA as BW in 2023.
 
 **Five active entry filters** (all in `EntryFilterConfig`, applied at T+1 engine entry):
-1. **fp_ratio < 0.45** (Step 10, updated Step 15): blocks high-fp stocks. Falls back to `fp_ratios.json` in CI.
+1. **ff_corr < 0.30** (Step 18): blocks stocks where foreign flow drives the price. Source: `ff_corr_ratios.json`.
 2. **breakout_strength >= -8%** (Step 11): blocks extreme overnight gap-downs at entry (T+1). 0 direct BW blocked cross-year.
 3. **combined BS/TBA** (Step 11): blocks entry when `breakout_strength < 0 AND top_broker_acc < 0`. 0 BW in 2024+2025. No-op in CI.
 4. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL.
-5. **Sector filter** (Step 16): blocks Consumer Cyclical, Financial Services, Industrials — 0 big winners across 3 years.
+5. **Sector filter + override** (Step 16/17): blocks Consumer Cyclical, Financial Services, Industrials — but allows when BS > 5% AND vol > 3x.
 
 **Pyramiding** (Steps 12-13, `PyramidConfig`):
 - Adds to positions already in trend mode (+15%)
@@ -158,7 +165,7 @@ reports/
 | No RSI/MACD at entry | These indicators are LAGGING. At breakout troughs, both look terrible. |
 | No FF at entry | FF at trough has Cohen's d = -0.0001. Zero predictive power. |
 | min_hold=5 | Trades surviving 5 days have 49% WR vs 7% for days 1-5. Step 10 re-tested min_hold=3 with real data: day-4 cliff (-132M) worse than day-6 (-126M), TREND_EXIT 16→9 trades. |
-| fp_ratio < 0.45 | Step 10 (updated Step 15): low-fp stocks have higher WR; high-fp stocks are macro hedge vehicles (BBCA, BMRI, BBRI, TLKM). Threshold 0.45 is the 3-year sweet spot. Tested 0.50 and 0.55 — both worsen 2024 (0.50: +0.06%, 0.55: -9.67%). Static aggregate fp_ratio is a known limitation — some stocks (TPIA, BREN, DSSA) swing between local/foreign-driven year-to-year. Future plan: use fp_ratio as accumulation flag (not hard block) for stocks in the 0.45-0.60 band. |
+| ff_corr < 0.30 | Step 18: replaces old fp_ratio < 0.45. Blocks stocks where foreign flow *actually drives* the price (Pearson corr of daily return vs net foreign flow). fp_ratio measured volume participation — wrong signal. DSSA/TPIA/BREN/AMMN had high fp but low corr, meaning foreigners trade them but don't move them. Now only 18 stocks blocked vs 61 before. Source: `ff_corr_ratios.json`. |
 | BS >= -8% at entry | Step 11: quick failures average BS=-3.1% to -4.8% (enter below breakout). -8% threshold blocks extreme gap-downs (4 trades/year, 0 BW lost directly). |
 | Block BS-/TBA- quadrant | Step 11: when breakout faded (BS<0) AND big money selling (TBA<0), 0 BW in either year. 11+9 trades blocked, all losers directly. No-op in CI. |
 | Composite score is no-op | Step 11: MPW=6 throttle never binds — max 4 signals/day observed. Ranking order is irrelevant. Do not tune weights. |

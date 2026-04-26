@@ -349,6 +349,32 @@ def load_fp_ratios(session: Session,
     return {r[0]: float(r[1]) for r in rows if r[1] is not None}
 
 
+def load_ff_corr_ratios(json_path: str = "ff_corr_ratios.json") -> Dict[str, float]:
+    """
+    Load precomputed ff-price correlation ratios from JSON.
+
+    ff_corr = Pearson correlation between daily price return and daily net foreign flow.
+    Computed over 2023-2025 data (see ff_corr_ratios.json).
+
+    High corr = foreign flow actually drives the price (true foreign-driven stock).
+    Low corr = foreigners trade it but don't move it (domestically driven).
+
+    Used as entry filter: block stocks where corr >= threshold (default 0.30).
+    This replaces the old fp_ratio filter which blocked by volume participation,
+    not by actual price influence.
+
+    Step 18: 18 stocks blocked (corr >= 0.30): BBRI, BBCA, BMRI, AMAN, ANTM,
+    PSAB, ASII, BBNI, PGAS, UNVR, TLKM, BRIS, GOTO, PTPP, GJTL, UNTR, INDF, DEWA.
+    """
+    import json as _json
+    from pathlib import Path
+    p = Path(json_path)
+    if not p.exists():
+        return {}
+    with open(p) as f:
+        return _json.load(f)
+
+
 def load_index_df(session: Session, index_code: str = "IHSG",
                    start_date: Optional[date] = None,
                    end_date: Optional[date] = None) -> pd.DataFrame:
