@@ -283,6 +283,15 @@ class BacktestEngine:
 
                         if shares >= 100:
                             buy = compute_buy_cost(open_price, shares)
+                            # Step 25: dynamic entry sizing — skip only if the position is
+                            # below the minimum meaningful size. calculate_position_size()
+                            # already scales to available cash, so undersized entries
+                            # (e.g. 6% when 12% is target) are allowed; we just gate out
+                            # trivially tiny ones below min_entry_fraction.
+                            min_entry_value = portfolio.total_equity * self.config.sizing.min_entry_fraction
+                            if buy["total_cost"] < min_entry_value:
+                                _set_fate(ticker, "size_too_small")
+                                continue
                             if buy["total_cost"] <= portfolio.cash:
                                 stop = self.portfolio_mgr.calculate_initial_stop(
                                     buy["exec_price"], atr,
@@ -328,10 +337,20 @@ class BacktestEngine:
                     add_open = current_data[ticker].get("open", current_data[ticker].get("close", 0))
                     if add_open <= 0:
                         continue
-                    add_shares = round_to_lot(int(pos.shares * pcfg.add_size_fraction))
+                    # Step 25: target-based add sizing — always 50% of the TARGET position
+                    # size (max_position_pct × portfolio), not 50% of actual entry shares.
+                    # This ensures undersized initial entries still receive full-size adds,
+                    # allowing the position to naturally "catch up" to full weight.
+                    target_add_value = portfolio.total_equity * self.config.sizing.max_position_pct * pcfg.add_size_fraction
+                    add_shares = round_to_lot(int(target_add_value / add_open))
                     if add_shares >= 100:
                         add_buy = compute_buy_cost(add_open, add_shares)
-                        if add_buy["total_cost"] <= portfolio.cash:
+                        # Step 25: cash reserve floor — block the add if it would drain cash
+                        # below the floor. New entries (step 1) can draw below the floor;
+                        # pyramid adds cannot. Prevents adds from starving new mega-winner entries.
+                        floor_amount = portfolio.total_equity * pcfg.cash_reserve_floor
+                        if (add_buy["total_cost"] <= portfolio.cash
+                                and (portfolio.cash - add_buy["total_cost"]) >= floor_amount):
                             portfolio.cash -= add_buy["total_cost"]
                             pos.remaining_shares += add_shares
                             pos.shares += add_shares
@@ -507,12 +526,16 @@ class BacktestEngine:
                                 add_open = current_data.get(ticker, {}).get("open",
                                     current_data.get(ticker, {}).get("close", 0))
                                 if add_open > 0:
+                                    # Step 25: target-based sizing (same as T+1 path)
+                                    target_add_value = portfolio.total_equity * self.config.sizing.max_position_pct * pcfg.add_size_fraction
                                     add_shares = round_to_lot(
-                                        int(pos.shares * pcfg.add_size_fraction)
+                                        int(target_add_value / add_open)
                                     )
                                     if add_shares >= 100:
                                         add_buy = compute_buy_cost(add_open, add_shares)
-                                        if add_buy["total_cost"] <= portfolio.cash:
+                                        floor_amount = portfolio.total_equity * pcfg.cash_reserve_floor
+                                        if (add_buy["total_cost"] <= portfolio.cash
+                                                and (portfolio.cash - add_buy["total_cost"]) >= floor_amount):
                                             portfolio.cash -= add_buy["total_cost"]
                                             pos.remaining_shares += add_shares
                                             pos.shares += add_shares

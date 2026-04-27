@@ -221,6 +221,10 @@ class PositionSizingConfig:
     # With 90% max exposure and 12% per stock, natural max is ~7-8 positions
     # But if some positions are small (partial sold or smaller stocks),
     # more positions can fit — just like real trading
+    # Step 25: minimum meaningful entry size (as fraction of portfolio).
+    # Entries are skipped when available cash < this threshold.
+    # Prevents trivially small positions from cluttering the portfolio.
+    min_entry_fraction: float = 0.05  # 5% = half the normal 12% position
 
 
 @dataclass
@@ -327,13 +331,18 @@ class PyramidConfig:
     """
     enable_pyramiding: bool = True
     max_adds: int = 5                  # max add-ons per position (Step 24: raised from 2)
-    add_size_fraction: float = 0.50    # each add = 50% of original position size
+    add_size_fraction: float = 0.50    # each add = 50% of TARGET position size (Step 25:
+                                       # target-based, not relative to actual entry shares)
     min_profit_to_add: float = 0.15    # must be +15% (trend mode) before adding
     use_new_high_trigger: bool = True  # Step 13: also pyramid on new 20d high (no vol req)
                                        # Catches slow grinders (PTRO +42% 2024: 0 adds
                                        # despite 40d hold — no volume spike ever fired)
     pyramid_t1_execution: bool = True  # Step 24: T+1 execution (realistic — signal known
                                        # only at close, so earliest tradeable is next open)
+    # Step 25: cash reserve floor — pyramid adds are blocked if executing would drop
+    # portfolio cash below this fraction. New entries can still draw below the floor
+    # (entries have priority over adds). Prevents adds from starving new mega-winner entries.
+    cash_reserve_floor: float = 0.10  # 10% of portfolio always reserved for new entries
 
 
 @dataclass

@@ -302,7 +302,8 @@ class SignalCombiner:
             return "SELL"
 
         ff_consec_sell = row.get("ff_consecutive_sell", 0)
-        if ff_consec_sell >= self.config.foreign_flow.exit_consecutive_sell_days:
+        if (self.config.foreign_flow.block_entry_on_ff_consecutive_sell
+                and ff_consec_sell >= self.config.foreign_flow.exit_consecutive_sell_days):
             return "SELL"
 
         if exposure > 0:

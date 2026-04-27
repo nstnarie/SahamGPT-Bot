@@ -15,6 +15,14 @@ on:
         description: "Starting capital (IDR)"
         required: true
         default: "1000000000"
+      cash_floor:
+        description: "Pyramid cash reserve floor (e.g. 0.10 = 10%). Adds blocked below this."
+        required: false
+        default: ""
+      min_entry:
+        description: "Min entry fraction (e.g. 0.05 = 5%). Entries smaller than this skipped."
+        required: false
+        default: ""
       # real_broker removed — real Asing broker data is always used
 
 jobs:
@@ -341,11 +349,19 @@ jobs:
       - name: Run backtest (if database exists)
         if: steps.check_db.outputs.exists == 'true'
         run: |
+          EXTRA_ARGS=""
+          if [ -n "${{ github.event.inputs.cash_floor }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --cash-floor ${{ github.event.inputs.cash_floor }}"
+          fi
+          if [ -n "${{ github.event.inputs.min_entry }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --min-entry ${{ github.event.inputs.min_entry }}"
+          fi
           python main_backtest.py \
             --start ${{ github.event.inputs.start_date }} \
             --end ${{ github.event.inputs.end_date }} \
             --capital ${{ github.event.inputs.capital }} \
             --output reports \
+            $EXTRA_ARGS
 
       - name: Create Excel trade log
         run: |

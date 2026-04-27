@@ -62,9 +62,16 @@ def parse_args():
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     # Pyramid experiment overrides
     parser.add_argument("--max-adds", type=int, default=None,
-                        help="Override pyramid max_adds (default: 2)")
+                        help="Override pyramid max_adds (default: 5)")
     parser.add_argument("--pyramid-t1", action="store_true",
                         help="Execute pyramid adds at T+1 open instead of same-day")
+    # Step 25: rebalancing experiment overrides
+    parser.add_argument("--cash-floor", type=float, default=None,
+                        help="Override pyramid cash_reserve_floor (default: 0.10). "
+                             "Pyramid adds are blocked if cash would drop below this fraction.")
+    parser.add_argument("--min-entry", type=float, default=None,
+                        help="Override min_entry_fraction (default: 0.05). "
+                             "Entries smaller than this fraction of portfolio are skipped.")
     return parser.parse_args()
 
 
@@ -87,6 +94,10 @@ def main():
         config.pyramid.max_adds = args.max_adds
     if args.pyramid_t1:
         config.pyramid.pyramid_t1_execution = True
+    if args.cash_floor is not None:
+        config.pyramid.cash_reserve_floor = args.cash_floor
+    if args.min_entry is not None:
+        config.sizing.min_entry_fraction = args.min_entry
 
     tickers = args.tickers or LQ45_TICKERS
     logger.info(f"Universe: {len(tickers)} stocks")
