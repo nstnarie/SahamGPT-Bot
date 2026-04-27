@@ -12,33 +12,39 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 24 — 2026-04-27)
+## Current State (Step 25 — 2026-04-27)
 
-**Backtest results** (real Asing broker data, ff-corr filter, sector override ON, liquidity filter ON, pyramid T+1 ON, max_adds=5):
+**Backtest results** (real Asing broker data, ff-corr filter, sector override ON, liquidity filter ON, pyramid T+1 ON, max_adds=5, conditional cash reserve floor=10%):
 
 | Year | Return | PF | WR | Trades | Max DD | Sharpe | Source |
 |------|--------|----|----|--------|--------|--------|--------|
-| 2023 | +102.7% | 2.73 | 40.3% | 67 | -9.11% | 2.67 | Local ✅ |
+| 2023 | +90.5% | 2.20 | 40.9% | 66 | -10.35% | 2.51 | Local ✅ |
 | 2024 | +25.8% | 2.95 | 52.0% | 75 | -11.45% | 1.08 | Local ✅ |
-| 2025 | +66.4% | 9.37 | 71.8% | 78 | -16.13% | 1.83 | Local ✅ |
+| 2025 | +146.6% | 12.21 | 68.5% | 73 | -37.45% | 2.17 | Local ✅ |
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
-Reports: `reports_step24_2023/`, `reports_step24_2024/`, `reports_step24_2025/`
+Reports: `reports_step25c_floor0.10_2023/`, `reports_step25c_floor0.10_2024/`, `reports_step25c_floor0.10_2025/`
 
-**Note — Step 24 vs Step 20 comparison:**
+**Note — Step 25 vs Step 24 comparison:**
 
-| Year | Step 20 (old baseline) | Step 24 (current) | Delta |
-|------|------------------------|-------------------|-------|
-| 2023 | +48.5% | +102.7% | **+54.2pp** |
-| 2024 | +31.1% | +25.8% | −5.3pp |
-| 2025 | +127.9% | +66.4% | −61.5pp |
+| Year | Step 24 (prev baseline) | Step 25 (current) | Delta |
+|------|-------------------------|-------------------|-------|
+| 2023 | +102.7% | +90.5% | −12.2pp |
+| 2024 | +25.8% | +25.8% | 0 |
+| 2025 | +66.4% | +146.6% | **+80.2pp** |
 
-2023 gains significantly from 5 adds on mega-winners (CUAN, PANI, DOID, WIIM).
-2024/2025 losses are driven by the cascade effect: extra pyramid adds on existing positions
-consume cash, blocking new mega-winner entries (key case: JARR 2025 entered 6 days late
-at 1345 instead of 1065, then exited at 1610 instead of riding to 4275 = −542M).
-**Rebalancing mechanism is the next priority to address this cascade.**
+2025 Max DD increased to −37.45% (from −16.13%): JARR's large position creates equity
+swings during the Aug–Oct hold. This is unrealized-gain drawdown, not loss drawdown.
+
+**Step 25: Conditional cash reserve floor** (`cash_reserve_floor = 0.10`):
+Pyramid adds are floor-constrained only on days when new entry signals were queued the
+previous day (`new_entries_queued` flag in engine.py). When no entries are competing, adds
+run freely — preserving CUAN/PANI compounding in 2023. When entries are pending, adds are
+blocked if they'd drop cash below 10% of portfolio — reserving cash for the new entry.
+Key fix: JARR 2025 now enters Aug 21 at 1065 (correct day), exits Oct 17 at 4275 = +869M.
+vs Step 24 cascade: entered Aug 27 at 1345, stopped out Sep 12 at 1610 = +11M.
+2024 is completely unaffected — pyramid adds rarely compete with new entries in 2024.
 
 **Step 19: Liquidity filter** (`min_avg_daily_value = 0.5B IDR`):
 Blocks stocks with 20-day rolling avg daily value (close × volume) below Rp 500M.
@@ -107,6 +113,9 @@ max_adds = 5                  # Step 24: raised from 2 (benefits 2023 +54pp, hur
 add_size_fraction = 0.50
 use_new_high_trigger = True   # Step 13: pyramid on new 20d high (no vol req)
 pyramid_t1_execution = True   # Step 24: T+1 open (realistic — signal known only at close)
+cash_reserve_floor = 0.10    # Step 25: conditional floor — only active when new_entries_queued
+# Sizing
+min_entry_fraction = 0.0     # Step 25: disabled — shares>=100 check suffices
 ```
 
 ---
@@ -191,6 +200,9 @@ reports/
 | Prior avg daily value ≥ 2B | Block event-spike stocks like DMAS | Blocks HRTA +34% as collateral at every threshold tested (1B–5B). Net effect neutral or negative. |
 | 52-week historical resistance breakout | Buy only stocks breaking annual highs | 2023 -16.9pp, 2024 +3pp, 2025 -46pp. Blocks PANI +90% (2023), INET +90%/TINS +96%/BRPT +69% (2025). Mega-winners break out below their prior-year high. |
 | block_entry_on_ff_consecutive_sell → False | JARR 2024 was blocked by ff_cs=9 on breakout day | JARR entered but net -3.2M. Pyramid add raised cost basis; brief spike resolved via time exit. 2024: −1.08pp. Rejected. |
+| Unconditional cash reserve floor (Step 25 attempt) | Fix JARR cascade without conditional logic | floor=0.10: 2025 +153% but 2023 −44pp. Floor throttles ALL adds including CUAN/PANI compounding. Too blunt. |
+| Target-based add sizing (Step 25 attempt) | Undersized entries catch up via flat adds | Breaks 2023 compounding: CUAN adds were exponentially growing (pos.shares×0.5); flat 6% per add caps total position at 42% vs 91%. Reverted. |
+| min_entry_fraction=0.05 (Step 25 attempt) | Skip trivially small positions | Blocks entries when portfolio equity has grown (5% of 2B = 100M min, but cash may be 90M). 2023: +30% vs +103%. Disabled (set to 0.0). |
 | trend_threshold_pct 0.15→0.10 (Step 21) | Earlier trend mode = earlier pyramid + MA trail; lower pyramid trigger | Monotonic trade-off: 2023 +16.3pp, 2024 −8.3pp, 2025 −4.6pp. 2023 TREND_EXIT 10→15 trades (+145M). 2024 REGIME_EXIT halved (+148M→+78M) — positions exit via MA10 break before regime changes. No cross-year sweet spot. |
 | trend_threshold_pct 0.15→0.12 (Step 23) | Compromise between 0.10 and 0.15 | 2023 +2.2pp, 2024 −3.9pp, 2025 −0.9pp. Same direction as Step 21, smaller magnitude. Confirms monotonic relationship — no threshold between 0.10–0.15 helps both years. |
 | Separate pyramid trigger at +10% (Step 22) | Decouple pyramid from trend exit — add earlier without changing MA trail | 2023 −5pp, 2024 −2.4pp, 2025 −12pp. Pyramid adds without trend-mode protection raise stop price; pullback triggers raised stop at worse level. Rejected. |
@@ -261,35 +273,40 @@ reports/
 
 ## Next Priorities (as of 2026-04-27)
 
-### Step 24 Baselines (2026-04-27)
+### Step 25 Baselines (2026-04-27)
 
-Pyramid T+1 execution + max_adds=5 implemented. Results:
+Conditional cash reserve floor (floor=0.10) implemented. Results:
 
 | Year | Return | PF | WR | Trades | Max DD | Sharpe |
 |------|--------|----|----|--------|--------|--------|
-| 2023 | +102.70% | 2.73 | 40.3% | 67 | -9.11% | 2.67 |
+| 2023 | +90.49% | 2.20 | 40.9% | 66 | -10.35% | 2.51 |
 | 2024 | +25.83% | 2.95 | 52.0% | 75 | -11.45% | 1.08 |
-| 2025 | +66.41% | 9.37 | 71.8% | 78 | -16.13% | 1.83 |
+| 2025 | +146.58% | 12.21 | 68.5% | 73 | -37.45% | 2.17 |
 
-Reports: `reports_step24_2023/`, `reports_step24_2024/`, `reports_step24_2025/`
+Reports: `reports_step25c_floor0.10_2023/`, `reports_step25c_floor0.10_2024/`, `reports_step25c_floor0.10_2025/`
+
+**2024 observation**: 2024 return is completely unaffected by any pyramid/floor change tested.
+Pyramid adds rarely compete with new entries in 2024 — the floor never meaningfully bites.
+2024 is a reliable sanity check: changes to pyramid mechanics should leave it near +25.8%.
 
 ---
 
-### 🔴 #1 PRIORITY — Rebalancing to fix the pyramid cascade
+### 🔴 #1 PRIORITY — Investigate 2023 −12pp loss from conditional floor
 
-**Problem**: With max_adds=5, extra pyramid adds on existing winners consume cash.
-New mega-winner signals get blocked or delayed, causing cascade losses.
-Key case: JARR 2025 — entered 6 days late (1345 vs 1065) due to no cash → exited at
-1610 instead of 4275 = −542M loss vs what it should have made.
+**Problem**: Step 25 floor=0.10 costs 2023 −12.2pp (102.7% → 90.5%) even with the
+conditional logic. Expected: CUAN/PANI adds should run freely when no new entries compete.
+Actual: some adds are still blocked, suggesting new entry signals do co-occur with pyramid
+add days on the 2023 mega-winners.
 
-**Goal**: Reserve cash for new entries even when existing positions are being pyramided.
-Ideas to explore (do not implement without Arie's explicit go-ahead):
-- Hard cash reserve: always keep X% of portfolio free for new entries
-- Position size cap: no single position (initial + adds) can exceed Y% of portfolio
-- Pyramid funding limit: adds can only use cash released by partial profits, not fresh capital
-- Partial reduction: trim existing position to free cash when a high-quality new signal arrives
+**Goal**: Understand which 2023 adds were blocked and why. Is this unavoidable (genuine
+competition between a new entry and a CUAN add on the same day), or is there a refinement
+that preserves both?
 
-Requires full 3-year backtest with cascade analysis before drawing conclusions.
+Do NOT start analysis without Arie's explicit go-ahead.
+
+---
+
+### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
 
 ---
 
@@ -347,7 +364,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_27_v39.md` — Step 24: pyramid T+1 execution + max_adds=5 implemented. New baselines: 2023 +102.7%, 2024 +25.8%, 2025 +66.4%. Cascade problem identified (JARR). Rebalancing is next.
+Most recent: `HANDOFF_SESSION_2026_04_27_v40.md` — Step 25: conditional cash reserve floor (floor=0.10). New baselines: 2023 +90.5%, 2024 +25.8%, 2025 +146.6%. JARR cascade fixed. Next: investigate 2023 −12pp.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 
