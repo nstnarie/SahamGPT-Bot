@@ -224,7 +224,7 @@ class PositionSizingConfig:
     # Step 25: minimum meaningful entry size (as fraction of portfolio).
     # Entries are skipped when available cash < this threshold.
     # Prevents trivially small positions from cluttering the portfolio.
-    min_entry_fraction: float = 0.05  # 5% = half the normal 12% position
+    min_entry_fraction: float = 0.0   # disabled — shares >= 100 check already handles minimum size
 
 
 @dataclass

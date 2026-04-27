@@ -121,6 +121,8 @@ class BacktestEngine:
         consecutive_losses: int = 0
         circuit_breaker_skip: int = 0  # signal days to skip
         signal_funnel: List[dict] = []  # Step 14: track every BUY signal and its fate
+        new_entries_queued: bool = False  # Step 25: True when new entry signals were queued
+                                          # yesterday; used by step 1b to apply conditional floor
 
         for i, current_date in enumerate(trading_dates):
             current_prices = {}
@@ -337,18 +339,16 @@ class BacktestEngine:
                     add_open = current_data[ticker].get("open", current_data[ticker].get("close", 0))
                     if add_open <= 0:
                         continue
-                    # Step 25: target-based add sizing — always 50% of the TARGET position
-                    # size (max_position_pct × portfolio), not 50% of actual entry shares.
-                    # This ensures undersized initial entries still receive full-size adds,
-                    # allowing the position to naturally "catch up" to full weight.
-                    target_add_value = portfolio.total_equity * self.config.sizing.max_position_pct * pcfg.add_size_fraction
-                    add_shares = round_to_lot(int(target_add_value / add_open))
+                    add_shares = round_to_lot(int(pos.shares * pcfg.add_size_fraction))
                     if add_shares >= 100:
                         add_buy = compute_buy_cost(add_open, add_shares)
-                        # Step 25: cash reserve floor — block the add if it would drain cash
-                        # below the floor. New entries (step 1) can draw below the floor;
-                        # pyramid adds cannot. Prevents adds from starving new mega-winner entries.
-                        floor_amount = portfolio.total_equity * pcfg.cash_reserve_floor
+                        # Step 25: conditional cash reserve floor — apply the floor only
+                        # when new entry signals were queued yesterday (new_entries_queued).
+                        # When no new entries are pending, adds run unconstrained (floor=0),
+                        # preserving compounding on existing winners (CUAN 2023 behaviour).
+                        # When entries are pending, floor reserves cash for them (JARR 2025).
+                        floor_amount = (portfolio.total_equity * pcfg.cash_reserve_floor
+                                        if new_entries_queued else 0.0)
                         if (add_buy["total_cost"] <= portfolio.cash
                                 and (portfolio.cash - add_buy["total_cost"]) >= floor_amount):
                             portfolio.cash -= add_buy["total_cost"]
@@ -526,14 +526,13 @@ class BacktestEngine:
                                 add_open = current_data.get(ticker, {}).get("open",
                                     current_data.get(ticker, {}).get("close", 0))
                                 if add_open > 0:
-                                    # Step 25: target-based sizing (same as T+1 path)
-                                    target_add_value = portfolio.total_equity * self.config.sizing.max_position_pct * pcfg.add_size_fraction
                                     add_shares = round_to_lot(
-                                        int(target_add_value / add_open)
+                                        int(pos.shares * pcfg.add_size_fraction)
                                     )
                                     if add_shares >= 100:
                                         add_buy = compute_buy_cost(add_open, add_shares)
-                                        floor_amount = portfolio.total_equity * pcfg.cash_reserve_floor
+                                        floor_amount = (portfolio.total_equity * pcfg.cash_reserve_floor
+                                                        if new_entries_queued else 0.0)
                                         if (add_buy["total_cost"] <= portfolio.cash
                                                 and (portfolio.cash - add_buy["total_cost"]) >= floor_amount):
                                             portfolio.cash -= add_buy["total_cost"]
@@ -567,6 +566,11 @@ class BacktestEngine:
                             "close": sig_row.get("close", float("nan")),
                             "fate": "queued",  # will be updated in step 1
                         })
+
+            # ── 3b. Update conditional floor flag for tomorrow's step 1b ──
+            # If new entry signals were queued today, step 1b tomorrow will apply the
+            # cash reserve floor on pyramid adds, reserving cash for those entries.
+            new_entries_queued = len(pending_entries) > 0
 
             # ── 4. Record equity ──
             portfolio.update_equity(current_prices)
