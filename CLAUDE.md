@@ -24,7 +24,7 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
 
-Reports: `reports_step25c_floor0.10_2023/`, `reports_step25c_floor0.10_2024/`, `reports_step25c_floor0.10_2025/`
+Reports: `reports_step25_2023/`, `reports_step25_2024/`, `reports_step25_2025/`
 
 **Note — Step 25 vs Step 24 comparison:**
 
@@ -283,7 +283,7 @@ Conditional cash reserve floor (floor=0.10) implemented. Results:
 | 2024 | +25.83% | 2.95 | 52.0% | 75 | -11.45% | 1.08 |
 | 2025 | +146.58% | 12.21 | 68.5% | 73 | -37.45% | 2.17 |
 
-Reports: `reports_step25c_floor0.10_2023/`, `reports_step25c_floor0.10_2024/`, `reports_step25c_floor0.10_2025/`
+Reports: `reports_step25_2023/`, `reports_step25_2024/`, `reports_step25_2025/`
 
 **2024 observation**: 2024 return is completely unaffected by any pyramid/floor change tested.
 Pyramid adds rarely compete with new entries in 2024 — the floor never meaningfully bites.

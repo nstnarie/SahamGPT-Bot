@@ -110,7 +110,7 @@ entries in 2024.
 | 2024 | +25.83% | 2.95 | 52.0% | 75 | -11.45% | 1.08 |
 | 2025 | +146.58% | 12.21 | 68.5% | 73 | -37.45% | 2.17 |
 
-Reports: `reports_step25c_floor0.10_2023/`, `reports_step25c_floor0.10_2024/`, `reports_step25c_floor0.10_2025/`
+Reports: `reports_step25_2023/`, `reports_step25_2024/`, `reports_step25_2025/`
 
 **2025 Max DD note**: −37.45% is driven by JARR's large position creating equity swings
 during the Aug–Oct hold period. This is unrealized-gain drawdown (position went from
