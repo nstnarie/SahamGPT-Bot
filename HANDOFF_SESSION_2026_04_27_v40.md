@@ -118,9 +118,19 @@ during the Aug–Oct hold period. This is unrealized-gain drawdown (position wen
 
 ---
 
-## Open Question for Next Session
+## Next Session Priority: 2024 Trade Deep Dive
 
-### Why does 2023 still lose −12pp with the conditional floor?
+Arie wants a detailed analysis of 2024 trades. 2024 is uniquely stable across all
+pyramid/cascade experiments — +25.8% regardless of floor value, max_adds, or cascade
+changes. This suggests 2024 returns are driven entirely by entry/exit quality, not
+compounding mechanics. Deep dive to understand: win/loss patterns, holding periods,
+which signals are working, and what 2024-specific improvements might look like.
+
+Do NOT start without Arie's explicit go-ahead.
+
+---
+
+## Backlog: Why does 2023 still lose −12pp with the conditional floor?
 
 Expected: CUAN/PANI/DOID adds should run freely on days with no new entries competing.
 Actual: 2023 return drops from +102.7% to +90.5% even with conditional logic.

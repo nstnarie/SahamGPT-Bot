@@ -291,18 +291,21 @@ Pyramid adds rarely compete with new entries in 2024 — the floor never meaning
 
 ---
 
-### 🔴 #1 PRIORITY — Investigate 2023 −12pp loss from conditional floor
+### 🔴 #1 PRIORITY — Deep dive on 2024 trades
 
-**Problem**: Step 25 floor=0.10 costs 2023 −12.2pp (102.7% → 90.5%) even with the
-conditional logic. Expected: CUAN/PANI adds should run freely when no new entries compete.
-Actual: some adds are still blocked, suggesting new entry signals do co-occur with pyramid
-add days on the 2023 mega-winners.
-
-**Goal**: Understand which 2023 adds were blocked and why. Is this unavoidable (genuine
-competition between a new entry and a CUAN add on the same day), or is there a refinement
-that preserves both?
+**Goal**: Understand what is driving 2024 results in detail. 2024 is uniquely stable
+(+25.8% regardless of all pyramid/floor changes across Steps 21–25), suggesting its
+returns are driven by entry/exit quality rather than pyramid compounding or cascade effects.
+Deep-dive the 2024 trade log to understand: which trades are winning/losing, what patterns
+exist, and whether there are improvements specific to 2024's market character.
 
 Do NOT start analysis without Arie's explicit go-ahead.
+
+### ⚪ Backlog — Investigate 2023 −12pp loss from conditional floor
+
+Step 25 floor=0.10 costs 2023 −12.2pp even with conditional logic. Two possible causes:
+(1) genuine add/entry competition on CUAN/PANI days, or (2) flag over-triggering on signals
+that were queued but never executed (throttled, filtered, etc.). Lower priority than 2024 deep dive.
 
 ---
 
