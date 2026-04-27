@@ -12,17 +12,33 @@ IDX swing trading signal bot for Indonesia Stock Exchange. Identifies stocks bre
 
 ---
 
-## Current State (Step 19 — 2026-04-27)
+## Current State (Step 24 — 2026-04-27)
 
-**Backtest results** (real Asing broker data, ff-corr filter, sector override ON, liquidity filter ON):
+**Backtest results** (real Asing broker data, ff-corr filter, sector override ON, liquidity filter ON, pyramid T+1 ON, max_adds=5):
 
-| Year | Return | PF | WR | Trades | Source |
-|------|--------|----|----|--------|--------|
-| 2023 | +48.5% | 2.14 | 42.7% | 75 | Local ✅ |
-| 2024 | +31.1% | 3.30 | 53.7% | 82 | Local ✅ |
-| 2025 | +127.9% | 9.15 | 66.2% | 77 | Local ✅ |
+| Year | Return | PF | WR | Trades | Max DD | Sharpe | Source |
+|------|--------|----|----|--------|--------|--------|--------|
+| 2023 | +102.7% | 2.73 | 40.3% | 67 | -9.11% | 2.67 | Local ✅ |
+| 2024 | +25.8% | 2.95 | 52.0% | 75 | -11.45% | 1.08 | Local ✅ |
+| 2025 | +66.4% | 9.37 | 71.8% | 78 | -16.13% | 1.83 | Local ✅ |
 
 IHSG 2023: +6.16% | IHSG 2024: -3.33% | IHSG 2025: +20.71%
+
+Reports: `reports_step24_2023/`, `reports_step24_2024/`, `reports_step24_2025/`
+
+**Note — Step 24 vs Step 20 comparison:**
+
+| Year | Step 20 (old baseline) | Step 24 (current) | Delta |
+|------|------------------------|-------------------|-------|
+| 2023 | +48.5% | +102.7% | **+54.2pp** |
+| 2024 | +31.1% | +25.8% | −5.3pp |
+| 2025 | +127.9% | +66.4% | −61.5pp |
+
+2023 gains significantly from 5 adds on mega-winners (CUAN, PANI, DOID, WIIM).
+2024/2025 losses are driven by the cascade effect: extra pyramid adds on existing positions
+consume cash, blocking new mega-winner entries (key case: JARR 2025 entered 6 days late
+at 1345 instead of 1065, then exited at 1610 instead of riding to 4275 = −542M).
+**Rebalancing mechanism is the next priority to address this cascade.**
 
 **Step 19: Liquidity filter** (`min_avg_daily_value = 0.5B IDR`):
 Blocks stocks with 20-day rolling avg daily value (close × volume) below Rp 500M.
@@ -43,6 +59,9 @@ TLKM, BRIS, GOTO, PTPP, GJTL, UNTR, INDF, DEWA.
 Allows entries in blocked sectors (Consumer Cyclical, Financial Services, Industrials)
 when breakout_strength > 5% AND vol_ratio > 3x. Added HRTA as BW in 2023.
 
+**Step 20: `block_entry_on_ff_consecutive_sell` config flag** (`ForeignFlowConfig`):
+Makes existing ff_consecutive_sell BUY-blocking behaviour configurable. `True` = baseline (block BUY when ff_consecutive_sell >= 5). Setting to `False` removes the redundant BUY blocker while FF_EXIT protection for existing positions remains active. Tested `False` in Step 20: JARR 2024 entered but net -3.2M due to pyramid add raising cost basis and brief spike. 2024: −1.08pp. Rejected — `True` is baseline.
+
 **Six active signal/entry filters:**
 1. **avg_daily_value_20d >= 0.5B** (Step 19): blocks illiquid stocks at signal generation. Source: `UniverseConfig.min_avg_daily_value`. Applied in `signal_combiner.py`.
 2. **ff_corr < 0.30** (Step 18): blocks stocks where foreign flow drives the price. Source: `ff_corr_ratios.json`. Applied at T+1 engine entry.
@@ -51,13 +70,14 @@ when breakout_strength > 5% AND vol_ratio > 3x. Added HRTA as BW in 2023.
 5. **MA200+BS combined** (Step 15): blocks when `price_vs_ma200 ∈ [0,10%) AND breakout_strength < 0`. 43 trades blocked (3-yr), 20.9% WR, 0 BW, -103.8M PnL.
 6. **Sector filter + override** (Step 16/17): blocks Consumer Cyclical, Financial Services, Industrials — but allows when BS > 5% AND vol > 3x.
 
-**Pyramiding** (Steps 12-13, `PyramidConfig`):
+**Pyramiding** (Steps 12-13-24, `PyramidConfig`):
 - Adds to positions already in trend mode (+15%)
 - Trigger: new breakout signal (volume-confirmed) OR new 20-day high (Step 13, no vol req)
-- Max 2 adds per position, each 50% of original size
+- Max 5 adds per position (Step 24: raised from 2), each 50% of original size
 - Stop ratchets up after each add to protect new capital
+- Execution: T+1 open (Step 24: was same-day open — unrealistic as signal is known only at close)
 - Step 13 rationale: grinders like PTRO (+42%, 40d, 2024) never triggered vol-based adds
-- Key drivers: INET +107% (145M), RAJA +35% (50M), JARR +50% (59M)
+- ⚠️ Cascade risk: with max_adds=5, extra capital in existing winners can block new entries
 
 **Key config values** (all in `config.py`):
 ```python
@@ -83,9 +103,10 @@ use_sector_filter = True      # Step 16: block CC, FS, Industrials
 min_avg_daily_value = 500_000_000  # Step 19: Rp 0.5B 20d rolling avg daily value
 # Pyramiding
 enable_pyramiding = True
-max_adds = 2
+max_adds = 5                  # Step 24: raised from 2 (benefits 2023 +54pp, hurts 2025 -61pp)
 add_size_fraction = 0.50
 use_new_high_trigger = True   # Step 13: pyramid on new 20d high (no vol req)
+pyramid_t1_execution = True   # Step 24: T+1 open (realistic — signal known only at close)
 ```
 
 ---
@@ -169,6 +190,11 @@ reports/
 | Block 500–999 price range | 500-999 bucket has PF 0.51, 0 big winners | Cascade removes JARR +219% and PTRO +30% via capital/throttle effects. 2025: -61pp. Do not implement. |
 | Prior avg daily value ≥ 2B | Block event-spike stocks like DMAS | Blocks HRTA +34% as collateral at every threshold tested (1B–5B). Net effect neutral or negative. |
 | 52-week historical resistance breakout | Buy only stocks breaking annual highs | 2023 -16.9pp, 2024 +3pp, 2025 -46pp. Blocks PANI +90% (2023), INET +90%/TINS +96%/BRPT +69% (2025). Mega-winners break out below their prior-year high. |
+| block_entry_on_ff_consecutive_sell → False | JARR 2024 was blocked by ff_cs=9 on breakout day | JARR entered but net -3.2M. Pyramid add raised cost basis; brief spike resolved via time exit. 2024: −1.08pp. Rejected. |
+| trend_threshold_pct 0.15→0.10 (Step 21) | Earlier trend mode = earlier pyramid + MA trail; lower pyramid trigger | Monotonic trade-off: 2023 +16.3pp, 2024 −8.3pp, 2025 −4.6pp. 2023 TREND_EXIT 10→15 trades (+145M). 2024 REGIME_EXIT halved (+148M→+78M) — positions exit via MA10 break before regime changes. No cross-year sweet spot. |
+| trend_threshold_pct 0.15→0.12 (Step 23) | Compromise between 0.10 and 0.15 | 2023 +2.2pp, 2024 −3.9pp, 2025 −0.9pp. Same direction as Step 21, smaller magnitude. Confirms monotonic relationship — no threshold between 0.10–0.15 helps both years. |
+| Separate pyramid trigger at +10% (Step 22) | Decouple pyramid from trend exit — add earlier without changing MA trail | 2023 −5pp, 2024 −2.4pp, 2025 −12pp. Pyramid adds without trend-mode protection raise stop price; pullback triggers raised stop at worse level. Rejected. |
+| Pyramid same-day execution (pre-Step 24) | Original design: execute pyramid add at today's open | Unrealistic — signal is confirmed at close, today's open is already in the past. T+1 is the only real-world model. Same-day was slightly optimistic in backtests. |
 
 ---
 
@@ -193,6 +219,7 @@ reports/
 | Real Asing FF (not synthetic) | broker_summary has 2.6M rows (2024-2025, 137 tickers). Pre-aggregated into foreign_flow for fast loading. Synthetic is gone. |
 | Lean split file | idx_broker_part_a.db (4.8MB) contains pre-aggregated foreign_flow (72k rows). Workflows restore from this instead of merging 2×100MB broker_summary files. |
 | Liquidity filter 0.5B | Step 19: blocks stocks with 20d avg daily value < Rp 500M at signal time. Zero big winners blocked across 3 years. Tested 1B (too aggressive, -6.7pp in 2024), settled on 0.5B (only blocks truly untradeable stocks like ARGO 0.04B). |
+| Pyramid T+1 + max_adds=5 | Step 24: T+1 is the only realistic execution model. max_adds=5 lets mega-winners compound further. Trade-off: extra adds consume cash, can block new mega-winner entries (JARR cascade: entered 6d late → exited at 1610 instead of 4275 = −542M in 2025). Next priority: rebalancing to reserve cash for new entries. |
 
 ---
 
@@ -234,17 +261,45 @@ reports/
 
 ## Next Priorities (as of 2026-04-27)
 
-### Step 19 Baselines — Confirmed (2026-04-27)
+### Step 24 Baselines (2026-04-27)
 
-Liquidity filter (0.5B) added. Results:
+Pyramid T+1 execution + max_adds=5 implemented. Results:
 
-| Year | Return | CAGR | PF | WR | Trades | Max DD | Sharpe | Calmar |
-|------|--------|------|----|----|--------|--------|--------|--------|
-| 2023 | +48.50% | 53.81% | 2.14 | 42.7% | 75 | -5.30% | 2.37 | 10.15 |
-| 2024 | +31.05% | 34.95% | 3.30 | 53.7% | 82 | -7.11% | 1.63 | 4.92 |
-| 2025 | +127.86% | 152.33% | 9.15 | 66.2% | 77 | -30.96% | 2.32 | 4.92 |
+| Year | Return | PF | WR | Trades | Max DD | Sharpe |
+|------|--------|----|----|--------|--------|--------|
+| 2023 | +102.70% | 2.73 | 40.3% | 67 | -9.11% | 2.67 |
+| 2024 | +25.83% | 2.95 | 52.0% | 75 | -11.45% | 1.08 |
+| 2025 | +66.41% | 9.37 | 71.8% | 78 | -16.13% | 1.83 |
 
-Reports: `reports_local_2023_liq05/`, `reports_local_2024_liq05/`, `reports_local_2025_liq05/`
+Reports: `reports_step24_2023/`, `reports_step24_2024/`, `reports_step24_2025/`
+
+---
+
+### 🔴 #1 PRIORITY — Rebalancing to fix the pyramid cascade
+
+**Problem**: With max_adds=5, extra pyramid adds on existing winners consume cash.
+New mega-winner signals get blocked or delayed, causing cascade losses.
+Key case: JARR 2025 — entered 6 days late (1345 vs 1065) due to no cash → exited at
+1610 instead of 4275 = −542M loss vs what it should have made.
+
+**Goal**: Reserve cash for new entries even when existing positions are being pyramided.
+Ideas to explore (do not implement without Arie's explicit go-ahead):
+- Hard cash reserve: always keep X% of portfolio free for new entries
+- Position size cap: no single position (initial + adds) can exceed Y% of portfolio
+- Pyramid funding limit: adds can only use cash released by partial profits, not fresh capital
+- Partial reduction: trim existing position to free cash when a high-quality new signal arrives
+
+Requires full 3-year backtest with cascade analysis before drawing conclusions.
+
+---
+
+### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
+
+Daily signal runs on GitHub with no broker DB. BS/TBA combined filter is a no-op in live signals
+(84 signals blocked in backtest but all pass through in live). Fix: pre-compute `top_broker_acc`
+per ticker/day → `broker_acc_daily.csv` → commit to repo.
+
+**Files to touch**: `database/data_loader.py`, `backtest/engine.py`, `signals/signal_combiner.py`.
 
 ---
 
@@ -259,34 +314,8 @@ Definition: trough-to-peak drawup > 50% AND avg daily value >= Rp 1B/day.
 | 2024 | 66 | 53 | PTRO +644% |
 | 2025 | 99 | 87 | JARR +3,100% |
 
-**NEXT SESSION**: Cross-reference mega_winners_analysis.xlsx against trade_log.csv (all 3 years)
-to compute capture rate, identify which mega winners were missed and why (which filter blocked them).
-Use reports from `reports_local_2023_liq05/`, `reports_local_2024_liq05/`, `reports_local_2025_liq05/`.
-
----
-
-### Signal Funnel Summary (Step 18 baseline, all 3 years)
-
-| Filter | 2023 | 2024 | 2025 | Total |
-|--------|------|------|------|-------|
-| executed | 40 | 44 | 47 | 131 |
-| sector_filter | 40 | 44 | 29 | 113 |
-| bs_tba_filter | 27 | 25 | 32 | 84 |
-| ma200_bs_filter | 17 | 17 | 17 | 51 |
-| bs_filter (gap-down) | 4 | 10 | 11 | 25 |
-| throttle | 3 | 8 | 11 | 22 |
-
-Note: `executed` counts initial entry signals only. Total trades (75/84/79) include pyramid adds and partial-profit exit rows.
-
----
-
-### ⚠️ MANDATORY — Pre-compute `top_broker_acc` daily CSV for GitHub
-
-Daily signal runs on GitHub with no broker DB. BS/TBA combined filter is a no-op in live signals
-(84 signals blocked in backtest but all pass through in live). Fix: pre-compute `top_broker_acc`
-per ticker/day → `broker_acc_daily.csv` → commit to repo.
-
-**Files to touch**: `database/data_loader.py`, `backtest/engine.py`, `signals/signal_combiner.py`.
+Cross-reference `mega_winners_analysis.xlsx` against `trade_log.csv` (Step 24 reports) to compute
+capture rate and identify which mega winners were missed and why.
 
 ---
 
@@ -294,7 +323,7 @@ per ticker/day → `broker_acc_daily.csv` → commit to repo.
 
 1. **fp_ratios.json** — Needs regeneration with 2023-2025 data for CI compatibility.
 2. **2021-2022 validation** — Run backtests for earlier years once price data confirmed.
-3. **min_profit_to_add 15%→10%** — Lower pyramid trigger, test independently.
+3. **SIDEWAYS regime stop-loss pattern** — All 34 stop-losses in 2023 and all 6 emergency stops in 2024 are SIDEWAYS regime. 71% of 2023 stop-losses have negative BS at T+1 entry. Potential filter experiment: block SIDEWAYS entries with BS < 0 (requires cascade-risk analysis first).
 
 ---
 
@@ -318,7 +347,7 @@ Reports saved to `--output` dir: `metrics_summary.txt`, `trade_log.csv`, PNG cha
 
 Session handoff docs are in the root directory: `HANDOFF_SESSION_YYYY_MM_DD_vNN.md`
 
-Most recent: `HANDOFF_SESSION_2026_04_27_v37.md` — Trade log deep-dive (HMSP, DMAS, MTEL). Four experiments tested and rejected: MPW=8, block 500-999, prior avg daily value ≥ 2B, 52-week historical resistance breakout. No code changes — all experiments reverted.
+Most recent: `HANDOFF_SESSION_2026_04_27_v39.md` — Step 24: pyramid T+1 execution + max_adds=5 implemented. New baselines: 2023 +102.7%, 2024 +25.8%, 2025 +66.4%. Cascade problem identified (JARR). Rebalancing is next.
 
 Each doc covers: what changed, why it was changed, what was tested and failed, current results, and next steps. **Read the latest one before making any changes.**
 

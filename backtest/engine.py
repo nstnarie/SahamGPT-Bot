@@ -115,6 +115,7 @@ class BacktestEngine:
         equity_history = {}
         completed_trades: List[Trade] = []
         pending_entries: Dict[str, float] = {}
+        pending_pyramid_adds: Dict[str, bool] = {}  # T+1 pyramid queue: ticker → True
         cooldown_until: Dict[str, object] = {}
         recent_entry_dates: List[object] = []  # rolling window for cluster limit
         consecutive_losses: int = 0
@@ -313,6 +314,40 @@ class BacktestEngine:
 
                 pending_entries.clear()
 
+            # ── 1b. Execute pending pyramid adds (T+1 path) ──
+            if pending_pyramid_adds:
+                for ticker in list(pending_pyramid_adds.keys()):
+                    if ticker not in portfolio.positions:
+                        continue
+                    pos = portfolio.positions[ticker]
+                    pcfg = self.config.pyramid
+                    if not pos.in_trend_mode or pos.pyramid_count >= pcfg.max_adds:
+                        continue
+                    if ticker not in current_data:
+                        continue
+                    add_open = current_data[ticker].get("open", current_data[ticker].get("close", 0))
+                    if add_open <= 0:
+                        continue
+                    add_shares = round_to_lot(int(pos.shares * pcfg.add_size_fraction))
+                    if add_shares >= 100:
+                        add_buy = compute_buy_cost(add_open, add_shares)
+                        if add_buy["total_cost"] <= portfolio.cash:
+                            portfolio.cash -= add_buy["total_cost"]
+                            pos.remaining_shares += add_shares
+                            pos.shares += add_shares
+                            pos.total_cost += add_buy["total_cost"]
+                            pos.pyramid_count += 1
+                            pos.pyramid_shares += add_shares
+                            pos.pyramid_cost += add_buy["total_cost"]
+                            new_stop = add_buy["exec_price"] * (1 - self.config.exit.stop_loss_pct)
+                            pos.stop_price = max(pos.stop_price, new_stop)
+                            logger.info(
+                                f"PYRAMID add (T+1): {ticker} x{add_shares} "
+                                f"@ {add_open:.0f} (add #{pos.pyramid_count}), "
+                                f"stop raised to {pos.stop_price:.0f}"
+                            )
+                pending_pyramid_adds.clear()
+
             # ── 2. Check exits ──
             trades_before_exits = len(completed_trades)
             tickers_to_exit = []
@@ -463,35 +498,37 @@ class BacktestEngine:
                                 and (sig_row.get("is_breakout", False)
                                      or (pcfg.use_new_high_trigger
                                          and _is_new_high(sig_row)))):
-                            # Execute pyramid add immediately (same-day signal → same-day add)
-                            add_open = current_data.get(ticker, {}).get("open",
-                                current_data.get(ticker, {}).get("close", 0))
-                            if add_open > 0:
-                                add_atr = sig_row.get("atr", pos.entry_atr) or pos.entry_atr
-                                # Size = fraction of original initial allocation
-                                add_shares = round_to_lot(
-                                    int(pos.shares * pcfg.add_size_fraction)
-                                )
-                                if add_shares >= 100:
-                                    add_buy = compute_buy_cost(add_open, add_shares)
-                                    if add_buy["total_cost"] <= portfolio.cash:
-                                        portfolio.cash -= add_buy["total_cost"]
-                                        pos.remaining_shares += add_shares
-                                        pos.shares += add_shares
-                                        pos.total_cost += add_buy["total_cost"]
-                                        pos.pyramid_count += 1
-                                        pos.pyramid_shares += add_shares
-                                        pos.pyramid_cost += add_buy["total_cost"]
-                                        # Raise stop to protect new capital
-                                        new_stop = add_buy["exec_price"] * (
-                                            1 - self.config.exit.stop_loss_pct
-                                        )
-                                        pos.stop_price = max(pos.stop_price, new_stop)
-                                        logger.info(
-                                            f"PYRAMID add: {ticker} x{add_shares} "
-                                            f"@ {add_open:.0f} (add #{pos.pyramid_count}), "
-                                            f"stop raised to {pos.stop_price:.0f}"
-                                        )
+                            if pcfg.pyramid_t1_execution:
+                                # T+1 path: queue the add, execute at next-day open
+                                pending_pyramid_adds[ticker] = True
+                                logger.info(f"PYRAMID queued (T+1): {ticker} — executes next open")
+                            else:
+                                # Baseline: execute same-day at today's open
+                                add_open = current_data.get(ticker, {}).get("open",
+                                    current_data.get(ticker, {}).get("close", 0))
+                                if add_open > 0:
+                                    add_shares = round_to_lot(
+                                        int(pos.shares * pcfg.add_size_fraction)
+                                    )
+                                    if add_shares >= 100:
+                                        add_buy = compute_buy_cost(add_open, add_shares)
+                                        if add_buy["total_cost"] <= portfolio.cash:
+                                            portfolio.cash -= add_buy["total_cost"]
+                                            pos.remaining_shares += add_shares
+                                            pos.shares += add_shares
+                                            pos.total_cost += add_buy["total_cost"]
+                                            pos.pyramid_count += 1
+                                            pos.pyramid_shares += add_shares
+                                            pos.pyramid_cost += add_buy["total_cost"]
+                                            new_stop = add_buy["exec_price"] * (
+                                                1 - self.config.exit.stop_loss_pct
+                                            )
+                                            pos.stop_price = max(pos.stop_price, new_stop)
+                                            logger.info(
+                                                f"PYRAMID add: {ticker} x{add_shares} "
+                                                f"@ {add_open:.0f} (add #{pos.pyramid_count}), "
+                                                f"stop raised to {pos.stop_price:.0f}"
+                                            )
                         continue  # don't add to pending_entries for held tickers
 
                     if ticker in portfolio.positions:

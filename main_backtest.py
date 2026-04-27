@@ -60,6 +60,11 @@ def parse_args():
     parser.add_argument("--output", default="reports")
     parser.add_argument("--log-level", default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    # Pyramid experiment overrides
+    parser.add_argument("--max-adds", type=int, default=None,
+                        help="Override pyramid max_adds (default: 2)")
+    parser.add_argument("--pyramid-t1", action="store_true",
+                        help="Execute pyramid adds at T+1 open instead of same-day")
     return parser.parse_args()
 
 
@@ -78,6 +83,10 @@ def main():
     config.backtest.start_date = args.start
     config.backtest.end_date = args.end
     config.backtest.initial_capital = args.capital
+    if args.max_adds is not None:
+        config.pyramid.max_adds = args.max_adds
+    if args.pyramid_t1:
+        config.pyramid.pyramid_t1_execution = True
 
     tickers = args.tickers or LQ45_TICKERS
     logger.info(f"Universe: {len(tickers)} stocks")

@@ -88,6 +88,13 @@ class ForeignFlowConfig:
     min_ksei_net_5d: float = -5_000_000_000.0
     use_ksei_filter: bool = True
 
+    # Step 20 experiment: ff_consecutive_sell in _evaluate_signal() blocks new BUY signals
+    # for stocks where foreigners have been selling >= 5 consecutive days.
+    # But exit logic is already handled by portfolio.py:check_exit_conditions().
+    # Setting this to False removes the redundant BUY blocker, allowing breakout entries
+    # even when ff_consecutive_sell >= 5. FF_EXIT protection remains active for exits.
+    block_entry_on_ff_consecutive_sell: bool = True
+
 
 @dataclass
 class TechnicalConfig:
@@ -319,12 +326,14 @@ class PyramidConfig:
     Simulation: ~+27M IDR theoretical upside across 2024+2025.
     """
     enable_pyramiding: bool = True
-    max_adds: int = 2                  # max add-ons per position (initial + 2 adds)
+    max_adds: int = 5                  # max add-ons per position (Step 24: raised from 2)
     add_size_fraction: float = 0.50    # each add = 50% of original position size
     min_profit_to_add: float = 0.15    # must be +15% (trend mode) before adding
     use_new_high_trigger: bool = True  # Step 13: also pyramid on new 20d high (no vol req)
                                        # Catches slow grinders (PTRO +42% 2024: 0 adds
                                        # despite 40d hold — no volume spike ever fired)
+    pyramid_t1_execution: bool = True  # Step 24: T+1 execution (realistic — signal known
+                                       # only at close, so earliest tradeable is next open)
 
 
 @dataclass
