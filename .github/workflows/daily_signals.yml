@@ -5,14 +5,19 @@ on:
     - cron: "35 9 * * 1-5"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   daily-signals:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install Playwright browser
+        run: playwright install chromium --with-deps
+
       - name: Download database from previous run
         uses: dawidd6/action-download-artifact@v6
         with:
@@ -37,6 +45,21 @@ jobs:
           if_no_artifact_found: warn
           workflow_conclusion: ""
           search_artifacts: true
+        continue-on-error: true
+
+      - name: Scrape broker accumulation data
+        env:
+          STOCKBIT_SESSION: ${{ secrets.STOCKBIT_SESSION }}
+        run: python scripts/scrape_broker_acc.py
+        continue-on-error: true
+
+      - name: Commit broker data to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add broker_acc_daily.csv broker_raw_daily.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "data: broker acc $(date +%Y-%m-%d)"
+          git push || true
         continue-on-error: true
 
       - name: Run daily signal pipeline

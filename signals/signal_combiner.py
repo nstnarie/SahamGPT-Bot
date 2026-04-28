@@ -8,7 +8,9 @@ Exit:  trend-following for high performers (MA10 break)
        + 5-day minimum hold before stop fires
 """
 
+import json
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -17,6 +19,14 @@ import pandas as pd
 from config import FrameworkConfig, DEFAULT_CONFIG
 from signals.market_regime import MarketRegimeFilter
 from signals.technical import TechnicalAnalyzer
+
+_SECTOR_MAPPING_PATH = Path(__file__).parent.parent / "sector_mapping.json"
+_SECTOR_MAPPING: Dict[str, str] = {}
+try:
+    with open(_SECTOR_MAPPING_PATH) as _f:
+        _SECTOR_MAPPING = json.load(_f)
+except FileNotFoundError:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +82,26 @@ class SignalCombiner:
 
         # Generate signals
         result["signal"] = result.apply(lambda row: self._evaluate_signal(row), axis=1)
+
+        # Step 16: Sector filter — block BUY signals for Consumer Cyclical,
+        # Financial Services, Industrials (0 big winners across 3 years).
+        # Step 17: Sector override — allow when breakout_strength > 5% AND vol_ratio > 3x.
+        ef = self.config.entry_filter
+        if ef.use_sector_filter and _SECTOR_MAPPING:
+            sector = _SECTOR_MAPPING.get(ticker, "Unknown")
+            if sector in ef.blocked_sectors:
+                is_override = (
+                    ef.use_sector_override
+                    and (result.get("breakout_strength", pd.Series(0, index=result.index)) > ef.sector_override_min_bs)
+                    and (result.get("vol_ratio", pd.Series(0, index=result.index)) > ef.sector_override_min_vol)
+                )
+                if not isinstance(is_override, pd.Series):
+                    is_override = pd.Series(is_override, index=result.index)
+                buy_mask = (result["signal"] == "BUY") & ~is_override
+                result.loc[buy_mask, "signal"] = "HOLD"
+                blocked = buy_mask.sum()
+                if blocked:
+                    logger.info(f"{ticker}: {blocked} BUY(s) blocked by sector filter ({sector})")
 
         # Compat columns
         result["foreign_score"] = 0.0
@@ -310,6 +340,26 @@ class SignalCombiner:
             is_breakout = row.get("is_breakout", False)
 
             if is_breakout:
+                ef = self.config.entry_filter
+
+                # Step 11: BS-/TBA- combined filter — block when breakout faded
+                # (BS < 0) AND big money selling (top_broker_acc < 0).
+                if ef.use_combined_bs_tba_filter:
+                    bs = row.get("breakout_strength", 0)
+                    tba = row.get("top_broker_acc", 0)
+                    if bs < 0 and tba < 0:
+                        return "HOLD"
+
+                # Step 15: MA200+BS combined filter — block false breakouts
+                # in the neutral zone (0–10% above MA200) when breakout_strength < 0.
+                if ef.use_ma200_bs_combined_filter:
+                    bs = row.get("breakout_strength", 0)
+                    pma = row.get("price_vs_ma200", None)
+                    if (pma is not None
+                            and 0 <= pma < ef.max_price_vs_ma200_for_bs_filter
+                            and bs < 0):
+                        return "HOLD"
+
                 return "BUY"
 
         return "HOLD"

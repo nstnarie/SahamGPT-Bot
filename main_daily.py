@@ -25,6 +25,7 @@ DISCLAIMER: For educational and research purposes only.
 """
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -127,8 +128,42 @@ def run_daily_pipeline(
         # ── 4. COMPUTE SIGNALS ──
         logger.info("Computing signals...")
         combiner = SignalCombiner(config)
+
+        # Load ff-price correlation ratios for the ff_corr entry filter (Step 18).
+        # Blocks stocks where foreign flow genuinely drives the price (corr >= 0.30).
+        ff_corr_path = Path(__file__).parent / "ff_corr_ratios.json"
+        fp_ratios: Dict[str, float] = {}
+        if ff_corr_path.exists():
+            with open(ff_corr_path) as f:
+                fp_ratios = json.load(f)
+            logger.info(f"Loaded ff_corr_ratios for {len(fp_ratios)} tickers")
+        else:
+            logger.warning("ff_corr_ratios.json not found — ff_corr filter disabled")
+
+        # Load pre-computed broker accumulation metrics (top_broker_acc, accumulation_score).
+        # Scraped daily before signal generation via scripts/scrape_broker_acc.py.
+        # If missing, BS/TBA and accumulation filters fall back to 0 (no effect).
+        broker_data: Dict[str, pd.DataFrame] = {}
+        broker_acc_path = Path(__file__).parent / "broker_acc_daily.csv"
+        if broker_acc_path.exists():
+            try:
+                broker_acc_df = pd.read_csv(broker_acc_path, parse_dates=["date"])
+                broker_acc_df = broker_acc_df.set_index("date")
+                for ticker in tickers:
+                    tdf = broker_acc_df[broker_acc_df["ticker"] == ticker][
+                        ["accumulation_score", "top_broker_acc"]
+                    ]
+                    if not tdf.empty:
+                        broker_data[ticker] = tdf
+                logger.info(f"Loaded broker_acc_daily for {len(broker_data)} tickers")
+            except Exception as e:
+                logger.warning(f"Failed to load broker_acc_daily.csv: {e} — broker filters disabled")
+        else:
+            logger.warning("broker_acc_daily.csv not found — broker filters disabled")
+
         all_signals = combiner.generate_signals_universe(
             universe_prices, ihsg_df, foreign_flows,
+            broker_data=broker_data, fp_ratios=fp_ratios,
         )
 
         # ── 5. MARKET REGIME ──
